@@ -75,10 +75,9 @@ PY
 
 ## Portability
 
-The only host-specific values are the three absolute bind mounts in
-`compose.yaml`. When storage moves to a NAS, stop the stack, copy the PostgreSQL
-and warehouse trees while stopped, update those paths, and start it again. For a
+The host storage root is the `DATA_ROOT` value in the untracked `.env`. When
+storage moves to a NAS, stop the stack, copy the PostgreSQL and warehouse trees
+while stopped, update `DATA_ROOT`, and start it again. For a
 multi-user university deployment, replace localhost RustFS and PostgreSQL with
 managed/shared services, external identity, TLS, backups, and monitored Iceberg
 maintenance; pipeline contracts and table names can remain unchanged.
-

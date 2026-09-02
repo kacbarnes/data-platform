@@ -7,6 +7,7 @@ if [[ ! -f .env ]]; then
   umask 077
   random_secret() { openssl rand -hex 24; }
   cat >.env <<EOF
+DATA_ROOT=/home/kent/Data
 POLARIS_REALM=POLARIS
 POLARIS_ROOT_CLIENT_ID=root
 POLARIS_ROOT_CLIENT_SECRET=$(random_secret)
@@ -21,10 +22,15 @@ EOF
   echo "Created private .env credentials."
 fi
 
+set -a
+source .env
+set +a
+DATA_ROOT="${DATA_ROOT:-/home/kent/Data}"
+
 mkdir -p \
-  /home/kent/Data/DataLake/warehouse \
-  /home/kent/Data/Databases/postgres/polaris \
-  /home/kent/Data/Databases/duckdb
+  "${DATA_ROOT}/DataLake/warehouse" \
+  "${DATA_ROOT}/Databases/postgres/polaris" \
+  "${DATA_ROOT}/Databases/duckdb"
 
 docker compose up -d postgres rustfs
 docker compose --profile bootstrap run --rm polaris-bootstrap
@@ -32,4 +38,3 @@ docker compose up -d polaris
 docker compose --profile bootstrap run --rm catalog-setup
 
 echo "Platform initialized. Polaris: http://localhost:8181; RustFS UI: http://localhost:9001"
-
