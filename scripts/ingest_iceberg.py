@@ -68,6 +68,11 @@ def main():
     parser.add_argument("--dataset-id", required=True)
     parser.add_argument("--namespace", default="bronze", type=valid_identifier)
     parser.add_argument("--table", required=True, type=valid_identifier)
+    parser.add_argument(
+        "--adopt-existing",
+        action="store_true",
+        help="verify and register an existing target instead of overwriting it",
+    )
     args = parser.parse_args()
     source = args.source.expanduser().resolve()
     if not source.is_file():
@@ -138,11 +143,22 @@ def main():
             [catalog_alias, args.namespace, args.table],
         ).fetchone()[0]
         if exists:
-            raise RuntimeError(f"target already exists: {target}")
-        quoted_source = str(source).replace("'", "''")
-        con.execute(f"CREATE TABLE {target} AS SELECT * FROM read_parquet('{quoted_source}')")
+            if not args.adopt_existing:
+                raise RuntimeError(
+                    f"target already exists: {target}; use --adopt-existing only "
+                    "after independently confirming its provenance"
+                )
+            target_row_count = con.execute(f"SELECT count(*) FROM {target}").fetchone()[0]
+            if target_row_count != row_count:
+                raise RuntimeError(
+                    f"cannot adopt {target}: source has {row_count} rows but target "
+                    f"has {target_row_count}"
+                )
+        else:
+            quoted_source = str(source).replace("'", "''")
+            con.execute(f"CREATE TABLE {target} AS SELECT * FROM read_parquet('{quoted_source}')")
         snapshot_id = con.execute(
-            f"SELECT snapshot_id FROM iceberg_snapshots('{target}') ORDER BY committed_at DESC LIMIT 1"
+            f"SELECT snapshot_id FROM iceberg_snapshots('{target}') ORDER BY timestamp_ms DESC LIMIT 1"
         ).fetchone()[0]
         con.execute(
             """UPDATE ingestion_runs SET source_sha256=?, source_size_bytes=?,
@@ -163,4 +179,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
