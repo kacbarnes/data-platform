@@ -78,7 +78,7 @@ else:
 
 # A Polaris service administrator can create catalogs but does not implicitly
 # receive data-plane privileges within them. Bind an explicit catalog role to
-# the built-in catalog_admin principal role and grant content management.
+# the built-in service_admin principal role and grant content management.
 catalog_role = f"{CATALOG}_content_admin"
 status, response = request(
     f"/api/management/v1/catalogs/{CATALOG}/catalog-roles",
@@ -90,7 +90,7 @@ if status not in (200, 201, 409):
     raise SystemExit(f"Catalog-role creation failed ({status}): {response}")
 
 status, response = request(
-    f"/api/management/v1/principal-roles/catalog_admin/catalog-roles/{CATALOG}",
+    f"/api/management/v1/principal-roles/service_admin/catalog-roles/{CATALOG}",
     method="PUT",
     token=token,
     body={"catalogRole": {"name": catalog_role}},
