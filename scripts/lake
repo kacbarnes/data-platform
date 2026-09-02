@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="${DATA_PLATFORM_HOME:-/home/kent/Projects/data-platform}"
+LAKE_BIN="${DATA_PLATFORM_LAKE:-/home/kent/miniforge3/envs/data-platform/bin/lake}"
+
+if [[ ! -x "${LAKE_BIN}" ]]; then
+  echo "lake: CLI is not installed; run:" >&2
+  echo "  mamba env update -n data-platform -f ${PROJECT_ROOT}/environment.yml --prune" >&2
+  echo "  ${PROJECT_ROOT}/scripts/install-cli" >&2
+  exit 1
+fi
+
+exec "${LAKE_BIN}" --project-root "${PROJECT_ROOT}" "$@"
+

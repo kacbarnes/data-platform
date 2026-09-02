@@ -42,35 +42,47 @@ Endpoints are bound to localhost:
 - RustFS API: `http://localhost:9000`
 - RustFS console: `http://localhost:9001`
 
-## First tracked migration
+## Install the platform CLI
 
 ```bash
 cd /home/kent/Projects/data-platform
-set -a
-source .env
-set +a
-mamba run -n data-platform python scripts/ingest_iceberg.py \
-  /home/kent/Data/Archive/legacy-project-data/capstone/usaspending/bulk/all_assistance.parquet \
-  --dataset-id usaspending.assistance \
-  --namespace bronze \
-  --table usaspending_assistance
+mamba env update -n data-platform -f environment.yml --prune
+./scripts/install-cli
 ```
 
-The archived Parquet remains the immutable source artifact. The command creates
-`research.bronze.usaspending_assistance` as an Iceberg table and records source
-checksum, byte and row counts, schema, Git commit, status, and Iceberg snapshot
-ID in `control.duckdb`. It refuses to overwrite an existing target.
+The environment contains matched DuckDB 1.5.5 CLI and Python packages. The
+editable package install makes `lake` available through `~/.local/bin` while
+keeping implementation changes under Git.
+
+## Contract-driven workflow
+
+```bash
+lake datasets
+lake ingest usaspending.assistance
+lake test usaspending.assistance
+lake status usaspending.assistance
+lake lineage usaspending.assistance
+```
+
+`lake ingest` reads the source location, catalog target, update policy, and
+quality expectations from `contracts/usaspending_assistance.yml`. A source
+checksum already recorded as successful is skipped automatically. Catalog
+metadata, snapshot history, run status, quality results, and Git provenance are
+updated without hand editing.
+
+Silver and gold products use transform contracts:
+
+```bash
+lake build <dataset-id>
+```
+
+See `docs/cli.md` for contract schemas, update strategies, recovery behavior,
+and the complete command reference.
 
 Inspect the audit trail:
 
 ```bash
-mamba run -n data-platform python - <<'PY'
-import duckdb
-print(duckdb.sql("""
-  FROM '/home/kent/Data/Databases/duckdb/control.duckdb'.ingestion_runs
-  ORDER BY started_at DESC
-"""))
-PY
+lake status --limit 20
 ```
 
 ## Query CLI

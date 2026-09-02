@@ -9,10 +9,10 @@
 - `lakehouse` as the attached interactive SQL client
 - Legacy `ingestion_runs` audit table in `control.duckdb`
 
-## CLI increment
+## Implemented CLI increment
 
-The next implementation replaces the one-dataset script with an installable
-`lake` package. The first supported command set is:
+The one-dataset script is replaced by an installable `lake` package. The first
+supported command set is:
 
 - `lake datasets`: discover and validate contracts
 - `lake ingest`: load a contracted source into bronze
@@ -25,6 +25,11 @@ The next implementation replaces the one-dataset script with an installable
 The CLI will preserve the existing `ingestion_runs` table and introduce generic
 run, version, lineage, and quality tables through migration `002`.
 
+Implementation modules separate configuration, contracts, catalog access,
+control metadata, quality checks, orchestration, and presentation. The old
+`scripts/ingest_iceberg.py` remains as a compatibility wrapper and refuses
+catalog targets that disagree with the contract.
+
 ## Deliberate first-version limits
 
 - File ingestion initially accepts one local Parquet, CSV, or JSON artifact per
@@ -35,4 +40,16 @@ run, version, lineage, and quality tables through migration `002`.
   so it can later be driven by systemd, Dagster, Airflow, or CI.
 - Iceberg maintenance and destructive lifecycle operations are intentionally
   excluded from routine commands.
+- Replace performs an explicit full refresh within a DuckDB transaction. Large
+  incremental partition replacement is a later increment.
+- Contract dependency ordering is explicit through `inputs`; recursive DAG
+  execution is a later increment. A build operates on one requested asset.
+
+## Next safe increments
+
+1. Add a real silver USAspending contract after column-level profiling and
+   domain review.
+2. Add multi-file deliveries with a source-file manifest and watermark policy.
+3. Add `lake plan` for dry-run dependency and mutation previews.
+4. Add scheduler integration only after two or more repeatable pipelines exist.
 

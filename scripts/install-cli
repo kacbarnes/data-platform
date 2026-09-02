@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON_BIN="${DATA_PLATFORM_PYTHON:-/home/kent/miniforge3/envs/data-platform/bin/python}"
+
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "install-cli: data-platform environment is missing" >&2
+  exit 1
+fi
+
+"${PYTHON_BIN}" -m pip install --no-deps --no-build-isolation --editable "${PROJECT_ROOT}"
+mkdir -p "${HOME}/.local/bin"
+ln -sfn "${PROJECT_ROOT}/scripts/lake" "${HOME}/.local/bin/lake"
+echo "Installed lake CLI and linked ${HOME}/.local/bin/lake"
+
