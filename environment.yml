@@ -4,6 +4,5 @@ channels:
 dependencies:
   - python=3.13
   - pip
-  - pip:
-      - duckdb>=1.4.0
-
+  - duckdb-cli=1.5.5
+  - python-duckdb=1.5.5

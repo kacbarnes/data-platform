@@ -73,6 +73,37 @@ print(duckdb.sql("""
 PY
 ```
 
+## Query CLI
+
+The `lakehouse` launcher opens DuckDB with the Polaris catalog already attached
+and selects the `bronze` namespace by default. Its temporary credential-bearing
+startup file is mode `0600` and is removed when DuckDB exits.
+
+```bash
+lakehouse
+```
+
+Inside the prompt:
+
+```sql
+SHOW ALL TABLES;
+SELECT count(*) FROM usaspending_assistance;
+SELECT * FROM usaspending_assistance LIMIT 10;
+SELECT *
+FROM iceberg_snapshots('lakehouse.bronze.usaspending_assistance')
+ORDER BY timestamp_ms DESC;
+```
+
+For a single non-interactive query:
+
+```bash
+lakehouse -c "SELECT count(*) FROM usaspending_assistance;"
+```
+
+The project copy lives at `scripts/lakehouse`; the installed command is a
+symlink in `~/.local/bin`, so improvements to the version-controlled launcher
+take effect immediately.
+
 ## Portability
 
 The host storage root is the `DATA_ROOT` value in the untracked `.env`. When
