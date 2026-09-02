@@ -1,0 +1,9 @@
+name: data-platform
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pip
+  - pip:
+      - duckdb>=1.4.0
+

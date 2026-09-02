@@ -1,0 +1,124 @@
+name: research-data-platform
+
+x-polaris-db-environment: &polaris-db-environment
+  POLARIS_PERSISTENCE_TYPE: relational-jdbc
+  POLARIS_PERSISTENCE_RELATIONAL_JDBC_DATABASE_TYPE: postgresql
+  QUARKUS_DATASOURCE_DB_KIND: postgresql
+  QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+  QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+  QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - /home/kent/Data/Databases/postgres/polaris:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-alpha.81
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - /home/kent/Data/DataLake/warehouse:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  bucket-setup:
+    image: amazon/aws-cli:2.36.29
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-west-2
+      AWS_ENDPOINT_URL: http://rustfs:9000
+      ICEBERG_BUCKET: ${ICEBERG_BUCKET}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - aws s3api head-bucket --bucket "$${ICEBERG_BUCKET}" >/dev/null 2>&1 || aws s3 mb "s3://$${ICEBERG_BUCKET}"
+
+  polaris-bootstrap:
+    image: apache/polaris-admin-tool:1.7.0
+    profiles: [bootstrap]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *polaris-db-environment
+      POLARIS_REALM: ${POLARIS_REALM}
+      POLARIS_ROOT_CLIENT_ID: ${POLARIS_ROOT_CLIENT_ID}
+      POLARIS_ROOT_CLIENT_SECRET: ${POLARIS_ROOT_CLIENT_SECRET}
+    command:
+      - bootstrap
+      - --realm=${POLARIS_REALM}
+      - --credential=${POLARIS_REALM},${POLARIS_ROOT_CLIENT_ID},${POLARIS_ROOT_CLIENT_SECRET}
+
+  polaris:
+    image: apache/polaris:1.7.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bucket-setup:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8181:8181"
+      - "127.0.0.1:8182:8182"
+    environment:
+      <<: *polaris-db-environment
+      AWS_REGION: us-west-2
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      polaris.realm-context.realms: ${POLARIS_REALM}
+      quarkus.otel.sdk.disabled: "true"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8182/q/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 15s
+
+  catalog-setup:
+    image: python:3.13-alpine
+    profiles: [bootstrap]
+    depends_on:
+      polaris:
+        condition: service_healthy
+    environment:
+      POLARIS_URL: http://polaris:8181
+      POLARIS_REALM: ${POLARIS_REALM}
+      POLARIS_ROOT_CLIENT_ID: ${POLARIS_ROOT_CLIENT_ID}
+      POLARIS_ROOT_CLIENT_SECRET: ${POLARIS_ROOT_CLIENT_SECRET}
+      POLARIS_CATALOG: ${POLARIS_CATALOG}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      ICEBERG_BUCKET: ${ICEBERG_BUCKET}
+    volumes:
+      - ./scripts/bootstrap_catalog.py:/bootstrap_catalog.py:ro
+    command: ["python", "/bootstrap_catalog.py"]
+
