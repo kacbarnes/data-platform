@@ -76,3 +76,34 @@ else:
         raise SystemExit(f"Catalog creation failed ({status}): {response}")
     print(f"Created Polaris catalog {CATALOG!r}.")
 
+# A Polaris service administrator can create catalogs but does not implicitly
+# receive data-plane privileges within them. Bind an explicit catalog role to
+# the built-in catalog_admin principal role and grant content management.
+catalog_role = f"{CATALOG}_content_admin"
+status, response = request(
+    f"/api/management/v1/catalogs/{CATALOG}/catalog-roles",
+    method="POST",
+    token=token,
+    body={"catalogRole": {"name": catalog_role, "properties": {}}},
+)
+if status not in (200, 201, 409):
+    raise SystemExit(f"Catalog-role creation failed ({status}): {response}")
+
+status, response = request(
+    f"/api/management/v1/principal-roles/catalog_admin/catalog-roles/{CATALOG}",
+    method="PUT",
+    token=token,
+    body={"catalogRole": {"name": catalog_role}},
+)
+if status not in (200, 201, 204, 409):
+    raise SystemExit(f"Catalog-role assignment failed ({status}): {response}")
+
+status, response = request(
+    f"/api/management/v1/catalogs/{CATALOG}/catalog-roles/{catalog_role}/grants",
+    method="PUT",
+    token=token,
+    body={"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"},
+)
+if status not in (200, 201, 204, 409):
+    raise SystemExit(f"Catalog privilege grant failed ({status}): {response}")
+print(f"Catalog role {catalog_role!r} has content-management privileges.")
