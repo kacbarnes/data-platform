@@ -26,11 +26,30 @@ target:
   table: example_source
 quality:
   minimum_rows: 1
+metadata:
+  external_run_id: upstream-123
+  proxy_geometry: true
 """)
     contract = ContractLoader(contracts).get("example.source")
     assert contract.kind == "source"
     assert contract.target.dotted == "research.bronze.example_source"
     assert contract.update.strategy == "create"
+    assert contract.metadata == {
+        "external_run_id": "upstream-123",
+        "proxy_geometry": True,
+    }
+
+
+def test_rejects_non_mapping_metadata(tmp_path):
+    contracts = tmp_path / "contracts"
+    write_contract(contracts, """
+dataset_id: example.source
+source: {path: /tmp/a.parquet}
+target: {catalog: research, namespace: bronze, table: example}
+metadata: not-a-mapping
+""")
+    with pytest.raises(ContractError, match="metadata must be a mapping"):
+        ContractLoader(contracts).all()
 
 
 def test_merge_requires_primary_key(tmp_path):
@@ -60,4 +79,3 @@ def test_quote_identifier_validates():
     assert quote_identifier("valid_name") == '"valid_name"'
     with pytest.raises(ContractError):
         quote_identifier("invalid-name")
-

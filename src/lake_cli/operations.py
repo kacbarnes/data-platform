@@ -142,6 +142,7 @@ class LakeService:
                 "target_rows": target_rows,
                 "snapshot_id": snapshot,
                 "source_schema": json.loads(source_schema),
+                "contract_metadata": contract.metadata,
             }
             control.finish(run_id, "succeeded", metrics=metrics)
             return {

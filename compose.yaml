@@ -26,6 +26,7 @@ services:
 
   rustfs:
     image: rustfs/rustfs:1.0.0-alpha.81
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:9000:9000"

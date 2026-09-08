@@ -68,6 +68,7 @@ else:
                     "endpointInternal": "http://rustfs:9000",
                     "pathStyleAccess": True,
                     "region": "us-west-2",
+                    "stsUnavailable": True,
                 },
             }
         },

@@ -40,6 +40,10 @@ class Settings:
     client_secret: str
     polaris_url: str
     catalog_alias: str = "lakehouse"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_endpoint: str = "localhost:9000"
+    s3_region: str = "us-west-2"
 
     @classmethod
     def load(cls, project_root: Path | None = None) -> "Settings":
@@ -73,4 +77,8 @@ class Settings:
             client_id=value("POLARIS_ROOT_CLIENT_ID"),
             client_secret=value("POLARIS_ROOT_CLIENT_SECRET"),
             polaris_url=value("POLARIS_URL", "http://localhost:8181"),
+            s3_access_key=value("RUSTFS_ACCESS_KEY"),
+            s3_secret_key=value("RUSTFS_SECRET_KEY"),
+            s3_endpoint=value("RUSTFS_CLIENT_ENDPOINT", "localhost:9000"),
+            s3_region=value("AWS_REGION", "us-west-2"),
         )

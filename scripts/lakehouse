@@ -29,6 +29,8 @@ set +a
 : "${POLARIS_ROOT_CLIENT_ID:?missing from .env}"
 : "${POLARIS_ROOT_CLIENT_SECRET:?missing from .env}"
 : "${POLARIS_CATALOG:?missing from .env}"
+: "${RUSTFS_ACCESS_KEY:?missing from .env}"
+: "${RUSTFS_SECRET_KEY:?missing from .env}"
 
 sql_escape() {
   local value="$1"
@@ -39,6 +41,8 @@ sql_escape() {
 client_id="$(sql_escape "${POLARIS_ROOT_CLIENT_ID}")"
 client_secret="$(sql_escape "${POLARIS_ROOT_CLIENT_SECRET}")"
 catalog="$(sql_escape "${POLARIS_CATALOG}")"
+rustfs_access_key="$(sql_escape "${RUSTFS_ACCESS_KEY}")"
+rustfs_secret_key="$(sql_escape "${RUSTFS_SECRET_KEY}")"
 
 umask 077
 init_sql="$(mktemp --tmpdir lakehouse-init.XXXXXXXX.sql)"
@@ -50,6 +54,15 @@ INSTALL iceberg;
 LOAD iceberg;
 INSTALL httpfs;
 LOAD httpfs;
+CREATE OR REPLACE SECRET lakehouse_s3_secret (
+    TYPE s3,
+    KEY_ID '${rustfs_access_key}',
+    SECRET '${rustfs_secret_key}',
+    REGION 'us-west-2',
+    ENDPOINT 'localhost:9000',
+    URL_STYLE 'path',
+    USE_SSL false
+);
 CREATE OR REPLACE SECRET polaris_secret (
     TYPE iceberg,
     CLIENT_ID '${client_id}',
@@ -61,7 +74,7 @@ ATTACH '${catalog}' AS lakehouse (
     TYPE iceberg,
     ENDPOINT 'http://localhost:8181/api/catalog',
     SECRET polaris_secret,
-    ACCESS_DELEGATION_MODE 'vended_credentials'
+    ACCESS_DELEGATION_MODE 'none'
 );
 USE lakehouse.bronze;
 .output stdout

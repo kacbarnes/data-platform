@@ -54,6 +54,7 @@ class Contract:
     target: Target
     update: UpdatePolicy
     quality: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     source: dict[str, Any] = field(default_factory=dict)
     transform: dict[str, Any] = field(default_factory=dict)
     inputs: tuple[str, ...] = ()
@@ -141,6 +142,9 @@ class ContractLoader:
         quality = data.get("quality") or data.get("expectations") or {}
         if not isinstance(quality, dict):
             raise ContractError(f"quality must be a mapping in {path}")
+        metadata = data.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            raise ContractError(f"metadata must be a mapping in {path}")
         inputs = tuple(data.get("inputs") or ())
         for input_id in inputs:
             if not isinstance(input_id, str) or not DATASET_ID.fullmatch(input_id):
@@ -155,8 +159,8 @@ class ContractLoader:
             target=target,
             update=UpdatePolicy(strategy, primary_key),
             quality=quality,
+            metadata=metadata,
             source=source,
             transform=transform,
             inputs=inputs,
         )
-

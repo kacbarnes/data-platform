@@ -4,6 +4,10 @@
 
 - Apache Polaris 1.7.0 with PostgreSQL persistence
 - RustFS S3-compatible object storage using a host bind mount
+- Direct local RustFS credentials for DuckDB, with Polaris configured
+  `stsUnavailable: true`; credentials remain in the untracked private `.env`
+- RustFS runs with the host UID/GID (default `1000:1000`) so its bind-mounted
+  warehouse remains writable without broadening filesystem permissions
 - DuckDB 1.5.5 Python binding and CLI
 - `research.bronze.usaspending_assistance` as the first tracked Iceberg table
 - `lakehouse` as the attached interactive SQL client
@@ -52,4 +56,3 @@ catalog targets that disagree with the contract.
 2. Add multi-file deliveries with a source-file manifest and watermark policy.
 3. Add `lake plan` for dry-run dependency and mutation previews.
 4. Add scheduler integration only after two or more repeatable pipelines exist.
-

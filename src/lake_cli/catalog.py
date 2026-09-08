@@ -32,6 +32,17 @@ def attach_catalog(connection: duckdb.DuckDBPyConnection, settings: Settings) ->
     connection.execute("INSTALL httpfs")
     connection.execute("LOAD httpfs")
     connection.execute(f"""
+        CREATE OR REPLACE SECRET lakehouse_s3_secret (
+            TYPE s3,
+            KEY_ID {sql_string(settings.s3_access_key)},
+            SECRET {sql_string(settings.s3_secret_key)},
+            REGION {sql_string(settings.s3_region)},
+            ENDPOINT {sql_string(settings.s3_endpoint)},
+            URL_STYLE 'path',
+            USE_SSL false
+        )
+    """)
+    connection.execute(f"""
         CREATE OR REPLACE SECRET polaris_secret (
             TYPE iceberg,
             CLIENT_ID {sql_string(settings.client_id)},
@@ -45,7 +56,7 @@ def attach_catalog(connection: duckdb.DuckDBPyConnection, settings: Settings) ->
             TYPE iceberg,
             ENDPOINT {sql_string(settings.polaris_url + '/api/catalog')},
             SECRET polaris_secret,
-            ACCESS_DELEGATION_MODE 'vended_credentials'
+            ACCESS_DELEGATION_MODE 'none'
         )
     """)
 
@@ -173,4 +184,3 @@ def publish_query(
 
 def schema_json(connection: duckdb.DuckDBPyConnection, query: str) -> str:
     return json.dumps(relation_schema(connection, query), separators=(",", ":"))
-

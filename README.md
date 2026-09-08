@@ -54,6 +54,11 @@ The environment contains matched DuckDB 1.5.5 CLI and Python packages. The
 editable package install makes `lake` available through `~/.local/bin` while
 keeping implementation changes under Git.
 
+This localhost deployment marks RustFS STS as unavailable in Polaris and gives
+DuckDB the private static RustFS credentials from `.env`. This is appropriate
+for the single-user local environment and avoids depending on temporary
+credential vending support in prerelease RustFS builds.
+
 ## Contract-driven workflow
 
 ```bash

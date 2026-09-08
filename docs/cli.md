@@ -39,6 +39,9 @@ quality:
   required_columns: [award_id, amount]
   not_null: [award_id]
   unique: [award_id]
+metadata:
+  external_run_id: upstream-pipeline-run-identifier
+  source_archive_sha256: immutable-upstream-archive-digest
 ```
 
 Transform contract:
@@ -65,6 +68,11 @@ quality:
 
 Supported source formats are Parquet, CSV, JSON, and newline-delimited JSON.
 The first release accepts one local source artifact per ingest run.
+
+The optional `metadata` mapping carries searchable upstream provenance and
+semantic flags. Successful ingests copy it unchanged into
+`pipeline_runs.metrics_json.contract_metadata`; the contract SHA-256 still
+identifies the complete reviewed YAML.
 
 ## Update strategies
 
@@ -150,4 +158,3 @@ The control database captures:
 - every contracted quality result.
 
 Failed runs remain in history. They are evidence, not clutter.
-
