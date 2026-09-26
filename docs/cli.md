@@ -83,9 +83,27 @@ override is a command name or executable path, not a command with extra flags.
 configuration rules above; the wrapper does not force its own checkout root.
 
 On native Windows, use the installed `lake` command or `python -m lake_cli`
-instead of the Bash wrapper. The installer, interactive `lakehouse` script, and
-initialization script still require portability work. Existing wrapper symlinks
-are not changed by this increment.
+instead of the Bash wrapper. The interactive `lakehouse` and initialization
+scripts still require portability work.
+
+### Installing into a user-owned environment
+
+On Linux/WSL, run `bash scripts/install-cli` from the checkout root. The script
+selects `DATA_PLATFORM_PYTHON` or `python` from `PATH` and installs its own
+checkout in editable mode. It does not use `DATA_PLATFORM_HOME` to select the
+software to install. On native Windows, or without the Bash helper, run this
+equivalent command from the checkout root in the intended Python environment:
+
+```text
+python -m pip install --no-deps --no-build-isolation --editable .
+```
+
+Dependencies and the Hatchling build backend must already be installed;
+`environment.yml` supplies them. A user-owned environment does not require
+administrator privileges. Package installation generates the `lake` entry point
+inside that environment. The installer no longer creates or replaces
+`~/.local/bin/lake`; any existing symlink is left untouched. Installation does
+not initialize services, create a data root, or migrate stored data.
 
 ## Dataset contracts
 

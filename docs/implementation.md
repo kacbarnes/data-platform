@@ -59,20 +59,28 @@ The relocatable-core milestone is in progress, not complete. Implemented:
   the module entry point, without hard-coded executable or project paths.
   Linux/WSL subprocess tests verify help and invalid-argument exit codes from
   outside the repository. These Bash-specific tests are skipped on Windows.
+- `scripts/install-cli` now selects `DATA_PLATFORM_PYTHON` or `python` from
+  `PATH`, installs its own checkout into that environment, and no longer creates
+  a user-bin symlink. Existing symlinks are left untouched. The equivalent pip
+  command is documented for native Windows. Isolated installer tests use a fake
+  interpreter to check argument boundaries, paths containing spaces, successful
+  and failed exit codes, and absence of user-bin creation, without running pip.
 
-Verification for this increment: all 29 tests pass on Linux. No live catalog
+Verification for this increment: all 31 tests pass on Linux, and
+`git diff --check` is clean. No live catalog
 verification is implied by these tests.
+The implementer also confirmed successful installation with the updated script.
 
 Remaining limitations: the selected project still requires `.env`, package
 fallback assumes a source-checkout layout. This increment does not
 complete launcher portability, diagnostics, or configuration initialization.
 
-The next safe v0.2 increment is to update `scripts/install-cli` to use the
-selected Python environment and stop creating a user-bin symlink: package
-installation already generates a platform-appropriate `lake` entry point.
-Existing symlinks should not be silently removed or replaced. The interactive
-`lakehouse` and initialization scripts still require separate migration of
-their service and credential-handling logic.
+The next safe v0.2 increment is to inspect the interactive `lakehouse` and
+`lake query` execution path and plan its migration into Python, reusing shared
+settings and catalog configuration. This requires careful handling of temporary
+credentials, executable discovery, and subprocess cleanup. Initialization remains
+a separate migration; neither service startup nor storage migration is completed
+by the launcher and installer changes.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
 
 ## Deliberate first-version limits

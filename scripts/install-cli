@@ -2,15 +2,17 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PYTHON_BIN="${DATA_PLATFORM_PYTHON:-/home/kent/miniforge3/envs/data-platform/bin/python}"
+PYTHON_BIN="${DATA_PLATFORM_PYTHON:-python}"
 
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-  echo "install-cli: data-platform environment is missing" >&2
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "install-cli: Python interpreter not found: ${PYTHON_BIN}" >&2
+  echo "Activate your environment or set DATA_PLATFORM_PYTHON." >&2
   exit 1
 fi
 
-"${PYTHON_BIN}" -m pip install --no-deps --no-build-isolation --editable "${PROJECT_ROOT}"
-mkdir -p "${HOME}/.local/bin"
-ln -sfn "${PROJECT_ROOT}/scripts/lake" "${HOME}/.local/bin/lake"
-echo "Installed lake CLI and linked ${HOME}/.local/bin/lake"
+"${PYTHON_BIN}" -m pip install \
+  --no-deps \
+  --no-build-isolation \
+  --editable "${PROJECT_ROOT}"
 
+echo "Installed lake CLI into the selected Python environment."
