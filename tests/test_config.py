@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from lake_cli.config import Settings, discover_project_root
+from lake_cli.config import Settings, discover_project_root, resolve_config_path
 from lake_cli.errors import LakeError
 
 
@@ -95,3 +95,55 @@ def test_settings_environment_isolation_and_precedence(tmp_path, monkeypatch):
     assert overridden.project_root == project.resolve()
     assert overridden.catalog == "environment_catalog"
     assert overridden.client_id == "test_client"
+
+
+@pytest.mark.parametrize(
+    "control_path",
+    [None, "state files/control.duckdb"],
+)
+def test_relative_settings_paths_use_project_root(tmp_path, monkeypatch, control_path):
+    project = make_project(tmp_path / "project with spaces")
+    other_directory = tmp_path / "somewhere else"
+    other_directory.mkdir()
+
+    lines = [
+        'DATA_ROOT="data files"',
+        "POLARIS_CATALOG=test_catalog",
+        "POLARIS_ROOT_CLIENT_ID=test_client",
+        "POLARIS_ROOT_CLIENT_SECRET=test_secret",
+        "RUSTFS_ACCESS_KEY=test_access",
+        "RUSTFS_SECRET_KEY=test_secret",
+    ]
+    if control_path is not None:
+        lines.append(f'CONTROL_DB="{control_path}"')
+
+    (project / ".env").write_text("\n".join(lines) + "\n")
+
+    monkeypatch.chdir(project)
+    first = Settings.load(project, environ={})
+
+    monkeypatch.chdir(other_directory)
+    second = Settings.load(project, environ={})
+
+    expected_data = (project / "data files").resolve()
+    expected_control = (
+        expected_data / "Databases" / "duckdb" / "control.duckdb"
+        if control_path is None
+        else (project / control_path).resolve()
+    )
+
+    assert first.data_root == second.data_root == expected_data
+    assert first.control_db == second.control_db == expected_control
+
+
+def test_config_path_expands_home(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home directory"
+    project = tmp_path / "project"
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+
+    result = resolve_config_path("~/data files", base=project)
+
+    assert result == (fake_home / "data files").resolve()

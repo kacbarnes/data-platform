@@ -44,22 +44,26 @@ The relocatable-core milestone is in progress, not complete. Implemented:
 - Injectable environment mappings shared by discovery and settings loading;
   an empty mapping isolates callers from process environment variables.
 - Consistent environment, `.env`, and default precedence for `CONTROL_DB`.
+- Shared `resolve_config_path()` helper: relative `DATA_ROOT` and configured
+  `CONTROL_DB` values resolve against the discovered project root; absolute
+  paths and home expansion are preserved. The default control database remains
+  beneath the resolved `DATA_ROOT`.
 - Temporary-file tests for discovery precedence, parent search, missing-root
-  failure, environment isolation, configuration overrides, and defaults.
+  failure, environment isolation, configuration overrides, and defaults, plus
+  working-directory independence, paths containing spaces, and home expansion.
 
-Verification for this increment: all 23 tests pass, the installed `lake --help`
+Verification for this increment: all 26 tests pass, the installed `lake --help`
 entry point succeeds, and `git diff --check` is clean. No live catalog
 verification is implied by these checks.
 
 Remaining limitations: the selected project still requires `.env`, package
-fallback assumes a source-checkout layout, and relative `DATA_ROOT`/`CONTROL_DB`
-values still depend on the process working directory. This increment does not
+fallback assumes a source-checkout layout. This increment does not
 complete launcher portability, diagnostics, or configuration initialization.
 
-The next safe v0.2 increment is to resolve configured relative data and control
-database paths against the discovered project root, with tests demonstrating
-that changing the working directory does not change their targets. Absolute
-paths and the control database default beneath `DATA_ROOT` should remain intact.
+The next safe v0.2 increment is to add a tested `python -m lake_cli` entry point
+using the existing CLI implementation. This provides an active-environment
+invocation path before migrating compatibility launchers away from hard-coded
+checkout and executable locations. Launcher migration remains separate work.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
 
 ## Deliberate first-version limits

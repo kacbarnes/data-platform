@@ -31,6 +31,13 @@ def _read_env(path: Path) -> dict[str, str]:
     return values
 
 
+def resolve_config_path(value: str, *, base: Path) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = base / path
+    return path.resolve()
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -63,19 +70,18 @@ class Settings:
                 raise LakeError(f"missing {name} in {root / '.env'}")
             return result
 
-        data_root = (
-            Path(value("DATA_ROOT", str(Path.home() / "Data"))).expanduser().resolve()
+        data_root = resolve_config_path(
+            value("DATA_ROOT", str(Path.home() / "Data")),
+            base=root,
         )
-        control_db = (
-            Path(
-                value(
-                    "CONTROL_DB",
-                    str(data_root / "Databases" / "duckdb" / "control.duckdb"),
-                )
-            )
-            .expanduser()
-            .resolve()
+        control_db = resolve_config_path(
+            value(
+                "CONTROL_DB",
+                str(data_root / "Databases" / "duckdb" / "control.duckdb"),
+            ),
+            base=root,
         )
+
         return cls(
             project_root=root,
             data_root=data_root,

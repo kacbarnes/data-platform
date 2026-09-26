@@ -45,9 +45,14 @@ support for a value in `.env`.
 
 `DATA_ROOT` defaults to `~/Data`; `CONTROL_DB` defaults to
 `<resolved DATA_ROOT>/Databases/duckdb/control.duckdb`. Both paths expand `~`.
-Currently, relative values resolve against the process working directory, not
-the project root. Use absolute paths until project-relative resolution is
-implemented. These settings do not change dataset source-path semantics.
+Relative `DATA_ROOT` and explicitly configured `CONTROL_DB` values resolve
+against the discovered project root, regardless of the process working
+directory. Absolute paths are not prefixed with the project root. For example,
+`DATA_ROOT="data files"` selects `<project root>/data files`, while
+`CONTROL_DB="state/control.duckdb"` selects `<project root>/state/control.duckdb`,
+not a path beneath `DATA_ROOT`. Omitting `CONTROL_DB` retains the default beneath
+the resolved `DATA_ROOT`. Resolution does not create directories. These settings
+do not change dataset source-path semantics.
 
 For Python callers and tests, `Settings.load(..., environ=mapping)` uses that
 mapping for both root discovery and configuration overrides. Omitting it (or
