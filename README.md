@@ -3,6 +3,9 @@
 A local, persistent Iceberg lakehouse used to learn and apply enterprise data
 management practices without hiding durable data inside Docker's virtual disk.
 
+See [`ROADMAP.md`](ROADMAP.md) for the portability and packaging milestones and
+[`docs/roadmap/`](docs/roadmap/) for their implementation plans.
+
 ## Architecture
 
 - **Polaris 1.7.0**: Iceberg REST catalog and authorization boundary.
