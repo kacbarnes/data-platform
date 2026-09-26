@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="${DATA_PLATFORM_HOME:-/home/kent/Projects/data-platform}"
-LAKE_BIN="${DATA_PLATFORM_LAKE:-/home/kent/miniforge3/envs/data-platform/bin/lake}"
+PYTHON_BIN="${DATA_PLATFORM_PYTHON:-python}"
 
-if [[ ! -x "${LAKE_BIN}" ]]; then
-  echo "lake: CLI is not installed; run:" >&2
-  echo "  mamba env update -n data-platform -f ${PROJECT_ROOT}/environment.yml --prune" >&2
-  echo "  ${PROJECT_ROOT}/scripts/install-cli" >&2
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "lake: Python interpreter not found: ${PYTHON_BIN}" >&2
+  echo "Activate the environment containing lake-cli," >&2
+  echo "or set DATA_PLATFORM_PYTHON to its Python executable." >&2
   exit 1
 fi
 
-exec "${LAKE_BIN}" --project-root "${PROJECT_ROOT}" "$@"
-
+exec "${PYTHON_BIN}" -m lake_cli "$@"

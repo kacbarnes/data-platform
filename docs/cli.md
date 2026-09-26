@@ -73,8 +73,19 @@ This uses whichever interpreter the shell resolves as `python`; activate the
 intended environment first. It works outside the repository when the package
 is installed, and uses the same project-discovery and configuration rules.
 `--help` exits before configuration loading and requires no `.env` or running
-lakehouse. The existing compatibility scripts have not yet been migrated away
-from machine-specific paths.
+lakehouse.
+
+On Linux/WSL, `scripts/lake` is an optional Bash compatibility wrapper. It uses
+`DATA_PLATFORM_PYTHON` when non-empty, otherwise `python` from `PATH`, and invokes
+`python -m lake_cli` with the original arguments and exit status. The interpreter
+override is a command name or executable path, not a command with extra flags.
+`DATA_PLATFORM_LAKE` is no longer used. Project selection follows the Python
+configuration rules above; the wrapper does not force its own checkout root.
+
+On native Windows, use the installed `lake` command or `python -m lake_cli`
+instead of the Bash wrapper. The installer, interactive `lakehouse` script, and
+initialization script still require portability work. Existing wrapper symlinks
+are not changed by this increment.
 
 ## Dataset contracts
 

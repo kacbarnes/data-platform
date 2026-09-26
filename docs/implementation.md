@@ -55,20 +55,24 @@ The relocatable-core milestone is in progress, not complete. Implemented:
   code. A subprocess test checks help from outside the repository using the
   test environment's Python interpreter, without loading platform credentials.
 
-Verification for this increment: all 27 tests pass, the installed `lake --help`
-entry point succeeds, and `git diff --check` is clean. No live catalog
-verification is implied by these checks.
+- `scripts/lake` now uses `DATA_PLATFORM_PYTHON` or `python` from `PATH` to run
+  the module entry point, without hard-coded executable or project paths.
+  Linux/WSL subprocess tests verify help and invalid-argument exit codes from
+  outside the repository. These Bash-specific tests are skipped on Windows.
+
+Verification for this increment: all 29 tests pass on Linux. No live catalog
+verification is implied by these tests.
 
 Remaining limitations: the selected project still requires `.env`, package
 fallback assumes a source-checkout layout. This increment does not
 complete launcher portability, diagnostics, or configuration initialization.
 
-The next safe v0.2 increment is to migrate compatibility launchers away from
-hard-coded checkout and executable locations, starting with `scripts/lake`.
-Use the module entry point with the selected Python environment, preserving
-argument forwarding and exit codes. Account for the installer's symlinked
-launcher and avoid recursive invocation of the wrapper itself. The module
-entry point is complete; launcher migration remains separate work.
+The next safe v0.2 increment is to update `scripts/install-cli` to use the
+selected Python environment and stop creating a user-bin symlink: package
+installation already generates a platform-appropriate `lake` entry point.
+Existing symlinks should not be silently removed or replaced. The interactive
+`lakehouse` and initialization scripts still require separate migration of
+their service and credential-handling logic.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
 
 ## Deliberate first-version limits
