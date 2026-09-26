@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import shlex
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
 
 from .errors import LakeError
 
@@ -46,29 +47,35 @@ class Settings:
     s3_region: str = "us-west-2"
 
     @classmethod
-    def load(cls, project_root: Path | None = None) -> "Settings":
-        configured_root = os.environ.get("DATA_PLATFORM_HOME")
-        if project_root is not None:
-            root = project_root
-        elif configured_root:
-            root = Path(configured_root)
-        else:
-            root = Path(__file__).resolve().parents[2]
-        root = Path(root).expanduser().resolve()
+    def load(
+        cls,
+        project_root: Path | None = None,
+        *,
+        environ: Mapping[str, str] | None = None,
+    ) -> Settings:
+        environment = os.environ if environ is None else environ
+        root = discover_project_root(project_root, environ=environment)
         file_values = _read_env(root / ".env")
 
         def value(name: str, default: str | None = None) -> str:
-            result = os.environ.get(name, file_values.get(name, default))
+            result = environment.get(name, file_values.get(name, default))
             if result is None or result == "":
                 raise LakeError(f"missing {name} in {root / '.env'}")
             return result
 
-        data_root = Path(value("DATA_ROOT", str(Path.home() / "Data"))).expanduser().resolve()
-        control_db = Path(
-            os.environ.get(
-                "CONTROL_DB", str(data_root / "Databases" / "duckdb" / "control.duckdb")
+        data_root = (
+            Path(value("DATA_ROOT", str(Path.home() / "Data"))).expanduser().resolve()
+        )
+        control_db = (
+            Path(
+                value(
+                    "CONTROL_DB",
+                    str(data_root / "Databases" / "duckdb" / "control.duckdb"),
+                )
             )
-        ).expanduser().resolve()
+            .expanduser()
+            .resolve()
+        )
         return cls(
             project_root=root,
             data_root=data_root,
@@ -82,3 +89,37 @@ class Settings:
             s3_endpoint=value("RUSTFS_CLIENT_ENDPOINT", "localhost:9000"),
             s3_region=value("AWS_REGION", "us-west-2"),
         )
+
+
+def discover_project_root(
+    explicit: Path | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    cwd: Path | None = None,
+    package_file: Path | None = None,
+) -> Path:
+    environment = os.environ if environ is None else environ
+
+    if explicit is not None:
+        return explicit.expanduser().resolve()
+
+    configured = environment.get("DATA_PLATFORM_HOME")
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    current = (cwd or Path.cwd()).resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "contracts"
+        ).is_dir():
+            return candidate
+
+    resolved_package_file = package_file or Path(__file__)
+    package_root = resolved_package_file.resolve().parents[2]
+    if (package_root / "pyproject.toml").is_file():
+        return package_root
+
+    raise LakeError(
+        "cannot locate the data-platform project; use --project-root "
+        "or set DATA_PLATFORM_HOME"
+    )
