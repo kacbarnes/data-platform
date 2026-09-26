@@ -51,8 +51,11 @@ The relocatable-core milestone is in progress, not complete. Implemented:
 - Temporary-file tests for discovery precedence, parent search, missing-root
   failure, environment isolation, configuration overrides, and defaults, plus
   working-directory independence, paths containing spaces, and home expansion.
+- `python -m lake_cli` delegates to the existing CLI and propagates its exit
+  code. A subprocess test checks help from outside the repository using the
+  test environment's Python interpreter, without loading platform credentials.
 
-Verification for this increment: all 26 tests pass, the installed `lake --help`
+Verification for this increment: all 27 tests pass, the installed `lake --help`
 entry point succeeds, and `git diff --check` is clean. No live catalog
 verification is implied by these checks.
 
@@ -60,10 +63,12 @@ Remaining limitations: the selected project still requires `.env`, package
 fallback assumes a source-checkout layout. This increment does not
 complete launcher portability, diagnostics, or configuration initialization.
 
-The next safe v0.2 increment is to add a tested `python -m lake_cli` entry point
-using the existing CLI implementation. This provides an active-environment
-invocation path before migrating compatibility launchers away from hard-coded
-checkout and executable locations. Launcher migration remains separate work.
+The next safe v0.2 increment is to migrate compatibility launchers away from
+hard-coded checkout and executable locations, starting with `scripts/lake`.
+Use the module entry point with the selected Python environment, preserving
+argument forwarding and exit codes. Account for the installer's symlinked
+launcher and avoid recursive invocation of the wrapper itself. The module
+entry point is complete; launcher migration remains separate work.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
 
 ## Deliberate first-version limits

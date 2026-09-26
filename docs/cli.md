@@ -59,6 +59,23 @@ mapping for both root discovery and configuration overrides. Omitting it (or
 passing `None`) uses the process environment; passing `{}` ignores the process
 environment but still loads the selected project's `.env`.
 
+## Running with the active Python environment
+
+With the package installed in the selected Python environment, `python -m
+lake_cli` exposes the same commands as the installed `lake` entry point:
+
+```bash
+python -m lake_cli --help
+python -m lake_cli --project-root /path/to/data-platform datasets
+```
+
+This uses whichever interpreter the shell resolves as `python`; activate the
+intended environment first. It works outside the repository when the package
+is installed, and uses the same project-discovery and configuration rules.
+`--help` exits before configuration loading and requires no `.env` or running
+lakehouse. The existing compatibility scripts have not yet been migrated away
+from machine-specific paths.
+
 ## Dataset contracts
 
 Source contract:
