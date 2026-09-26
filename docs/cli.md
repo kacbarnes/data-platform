@@ -16,6 +16,44 @@ Commands obtain local platform configuration from the repository `.env`. They
 must not require callers to manually register a table, update a catalog pointer,
 or write operational metadata.
 
+## Configuration and project discovery
+
+`Settings.load()` selects the project root in this order:
+
+1. The explicit global `--project-root` option.
+2. A non-empty `DATA_PLATFORM_HOME` environment variable.
+3. The current working directory, then its parents, selecting the first directory
+   containing both `pyproject.toml` and a `contracts/` directory.
+4. The package's checkout root (two directory levels above the package directory),
+   if it contains `pyproject.toml`.
+
+If discovery fails, the CLI asks for `--project-root` or `DATA_PLATFORM_HOME`.
+Explicit and environment-provided roots are expanded and resolved; configuration
+loading then requires a readable `.env` at the selected root. `DATA_PLATFORM_HOME`
+must be supplied before loading that file, not solely inside it.
+
+For example, select a checkout explicitly when calling from another directory:
+
+```bash
+lake --project-root /path/to/data-platform datasets
+```
+
+Configuration values use environment variables first, the selected project's
+`.env` second, and defaults where defined. An empty selected value is an error,
+not a request to fall back. `CONTROL_DB` follows this same precedence, including
+support for a value in `.env`.
+
+`DATA_ROOT` defaults to `~/Data`; `CONTROL_DB` defaults to
+`<resolved DATA_ROOT>/Databases/duckdb/control.duckdb`. Both paths expand `~`.
+Currently, relative values resolve against the process working directory, not
+the project root. Use absolute paths until project-relative resolution is
+implemented. These settings do not change dataset source-path semantics.
+
+For Python callers and tests, `Settings.load(..., environ=mapping)` uses that
+mapping for both root discovery and configuration overrides. Omitting it (or
+passing `None`) uses the process environment; passing `{}` ignores the process
+environment but still loads the selected project's `.env`.
+
 ## Dataset contracts
 
 Source contract:

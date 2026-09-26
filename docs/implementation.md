@@ -34,6 +34,34 @@ control metadata, quality checks, orchestration, and presentation. The old
 `scripts/ingest_iceberg.py` remains as a compatibility wrapper and refuses
 catalog targets that disagree with the contract.
 
+## v0.2 progress: configuration discovery
+
+The relocatable-core milestone is in progress, not complete. Implemented:
+
+- Centralized project discovery in `discover_project_root()`, called by
+  `Settings.load()`: explicit root, environment override, working-directory
+  ancestor search, then package checkout fallback.
+- Injectable environment mappings shared by discovery and settings loading;
+  an empty mapping isolates callers from process environment variables.
+- Consistent environment, `.env`, and default precedence for `CONTROL_DB`.
+- Temporary-file tests for discovery precedence, parent search, missing-root
+  failure, environment isolation, configuration overrides, and defaults.
+
+Verification for this increment: all 23 tests pass, the installed `lake --help`
+entry point succeeds, and `git diff --check` is clean. No live catalog
+verification is implied by these checks.
+
+Remaining limitations: the selected project still requires `.env`, package
+fallback assumes a source-checkout layout, and relative `DATA_ROOT`/`CONTROL_DB`
+values still depend on the process working directory. This increment does not
+complete launcher portability, diagnostics, or configuration initialization.
+
+The next safe v0.2 increment is to resolve configured relative data and control
+database paths against the discovered project root, with tests demonstrating
+that changing the working directory does not change their targets. Absolute
+paths and the control database default beneath `DATA_ROOT` should remain intact.
+See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
+
 ## Deliberate first-version limits
 
 - File ingestion initially accepts one local Parquet, CSV, or JSON artifact per
