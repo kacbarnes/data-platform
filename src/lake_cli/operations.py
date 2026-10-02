@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-import subprocess
 from typing import Any
 
 import duckdb
@@ -23,6 +22,7 @@ from .contracts import Contract, ContractLoader
 from .control import ControlStore
 from .errors import ContractError, LakeError
 from .quality import CheckResult, ensure_passed, evaluate
+from .query_client import run_query
 
 
 def file_sha256(path: Path) -> str:
@@ -263,7 +263,4 @@ class LakeService:
             connection.close()
 
     def query(self, arguments: list[str]) -> int:
-        if arguments[:1] == ["--"]:
-            arguments = arguments[1:]
-        command = [str(self.settings.project_root / "scripts" / "lakehouse"), *arguments]
-        return subprocess.run(command, check=False).returncode
+        return run_query(self.settings, arguments)

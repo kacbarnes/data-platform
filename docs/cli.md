@@ -83,8 +83,9 @@ override is a command name or executable path, not a command with extra flags.
 configuration rules above; the wrapper does not force its own checkout root.
 
 On native Windows, use the installed `lake` command or `python -m lake_cli`
-instead of the Bash wrapper. The interactive `lakehouse` and initialization
-scripts still require portability work.
+instead of the Bash wrapper. The optional `scripts/lakehouse` wrapper likewise
+invokes the Python CLI's `query` command. Initialization still requires
+portability work.
 
 ### Installing into a user-owned environment
 
@@ -229,9 +230,35 @@ machine-readable output.
 
 ```bash
 lake query
+lake query -- -c "SELECT count(*) FROM usaspending_assistance;"
+python -m lake_cli --project-root /path/to/platform query
 ```
 
-This delegates to the `lakehouse` DuckDB client with Polaris already attached.
+This starts the DuckDB CLI directly from Python with Polaris attached and the
+`bronze` namespace selected. It works without Bash on native Windows and Linux;
+the package and a compatible DuckDB CLI must be installed in the selected
+environment. Linux execution is tested; native Windows execution still needs
+host validation. The Python DuckDB binding alone does not provide the CLI.
+
+Set `DATA_PLATFORM_DUCKDB` to an executable path or command name to override
+discovery; otherwise `duckdb` is found on `PATH`. Paths containing spaces are
+passed as individual subprocess arguments. An invalid explicit override fails
+instead of falling back silently. Put DuckDB options after `query --`.
+
+The query client uses the same settings and catalog setup statements as Python
+ingestion, including configured Polaris URL, S3 endpoint and region. It no
+longer checks a fixed localhost health URL or sources `.env` as shell code.
+Connection and initialization errors come from DuckDB. Startup errors stop the
+requested query, while an interactive SQL error does not end the session.
+
+Credentials are written to a temporary startup file, closed before the child
+process opens it for Windows compatibility. The file uses mode `0600` on POSIX;
+Windows protection follows temporary-directory ACLs. It is deleted after normal
+exit, launch failure, or Ctrl+C; forcibly killing the parent or a system crash
+can leave it behind. Setup output and command echo are disabled. Credentials
+are not put in process arguments. Child exit codes are preserved, and Ctrl+C
+returns 130. Query SQL is an interactive analysis interface; use tracked ingest
+and build commands for publication rather than manual catalog mutations.
 
 ## Automatic tracking
 

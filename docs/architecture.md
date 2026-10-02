@@ -10,11 +10,17 @@
 | Durable table objects | RustFS | Iceberg warehouse bind mount |
 | Contracts and transformations | Git | This repository |
 | Runs, lineage, and quality results | `lake` CLI | `${DATA_ROOT}/Databases/duckdb/control.duckdb` |
-| Interactive analysis | DuckDB CLI | `lakehouse` command |
+| Interactive analysis | DuckDB CLI | `lake query` (optional `lakehouse` wrapper) |
 
 Nothing except the object-store service may write directly to `warehouse`.
 Projects address tables by catalog, namespace, and table name rather than by
 physical paths.
+
+The Python query client owns executable discovery, a temporary credential-bearing
+startup file, subprocess execution, and cleanup. It reuses `Settings` and the
+catalog setup statements used by Python ingestion. The Linux/WSL `lakehouse`
+script is a thin compatibility wrapper; native Windows uses `lake query` or
+`python -m lake_cli ... query` directly. Container startup is separate.
 
 ## Data lifecycle
 
@@ -50,4 +56,3 @@ Research projects do not own copies of shared data. They contain contracts,
 SQL/Python transformations, tests, notebooks, and models. They query shared
 tables through Polaris and publish reusable outputs as new catalog tables. Each
 published output records the exact input snapshots and producing Git commit.
-

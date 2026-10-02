@@ -1,86 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="${DATA_PLATFORM_HOME:-/home/kent/Projects/data-platform}"
-ENV_FILE="${PROJECT_ROOT}/.env"
-DUCKDB_BIN="${DATA_PLATFORM_DUCKDB:-/home/kent/miniforge3/envs/data-platform/bin/duckdb}"
-
-if [[ ! -r "${ENV_FILE}" ]]; then
-  echo "lakehouse: cannot read ${ENV_FILE}; run ${PROJECT_ROOT}/scripts/init-platform first" >&2
+PYTHON_BIN="${DATA_PLATFORM_PYTHON:-python}"
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "lakehouse: activate your Python environment or set DATA_PLATFORM_PYTHON" >&2
   exit 1
 fi
 
-if [[ ! -x "${DUCKDB_BIN}" ]]; then
-  echo "lakehouse: DuckDB CLI is missing from the data-platform environment" >&2
-  echo "Run: mamba env update -n data-platform -f ${PROJECT_ROOT}/environment.yml --prune" >&2
-  exit 1
-fi
-
-if ! curl --fail --silent --max-time 2 http://localhost:8182/q/health >/dev/null; then
-  echo "lakehouse: Polaris is not healthy; start it with:" >&2
-  echo "  cd ${PROJECT_ROOT} && docker compose up -d" >&2
-  exit 1
-fi
-
-set -a
-source "${ENV_FILE}"
-set +a
-
-: "${POLARIS_ROOT_CLIENT_ID:?missing from .env}"
-: "${POLARIS_ROOT_CLIENT_SECRET:?missing from .env}"
-: "${POLARIS_CATALOG:?missing from .env}"
-: "${RUSTFS_ACCESS_KEY:?missing from .env}"
-: "${RUSTFS_SECRET_KEY:?missing from .env}"
-
-sql_escape() {
-  local value="$1"
-  value="${value//\'/\'\'}"
-  printf '%s' "${value}"
-}
-
-client_id="$(sql_escape "${POLARIS_ROOT_CLIENT_ID}")"
-client_secret="$(sql_escape "${POLARIS_ROOT_CLIENT_SECRET}")"
-catalog="$(sql_escape "${POLARIS_CATALOG}")"
-rustfs_access_key="$(sql_escape "${RUSTFS_ACCESS_KEY}")"
-rustfs_secret_key="$(sql_escape "${RUSTFS_SECRET_KEY}")"
-
-umask 077
-init_sql="$(mktemp --tmpdir lakehouse-init.XXXXXXXX.sql)"
-trap 'rm -f -- "${init_sql}"' EXIT INT TERM
-
-cat >"${init_sql}" <<SQL
-.output /dev/null
-INSTALL iceberg;
-LOAD iceberg;
-INSTALL httpfs;
-LOAD httpfs;
-CREATE OR REPLACE SECRET lakehouse_s3_secret (
-    TYPE s3,
-    KEY_ID '${rustfs_access_key}',
-    SECRET '${rustfs_secret_key}',
-    REGION 'us-west-2',
-    ENDPOINT 'localhost:9000',
-    URL_STYLE 'path',
-    USE_SSL false
-);
-CREATE OR REPLACE SECRET polaris_secret (
-    TYPE iceberg,
-    CLIENT_ID '${client_id}',
-    CLIENT_SECRET '${client_secret}',
-    OAUTH2_SCOPE 'PRINCIPAL_ROLE:ALL',
-    OAUTH2_SERVER_URI 'http://localhost:8181/api/catalog/v1/oauth/tokens'
-);
-ATTACH '${catalog}' AS lakehouse (
-    TYPE iceberg,
-    ENDPOINT 'http://localhost:8181/api/catalog',
-    SECRET polaris_secret,
-    ACCESS_DELEGATION_MODE 'none'
-);
-USE lakehouse.bronze;
-.output stdout
-.mode duckbox
-.maxrows 40
-.prompt 'lakehouse> ' '       ...> '
-SQL
-
-"${DUCKDB_BIN}" -init "${init_sql}" "$@" :memory:
+exec "${PYTHON_BIN}" -m lake_cli query -- "$@"

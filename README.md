@@ -54,7 +54,7 @@ mamba env update -n data-platform -f environment.yml --prune
 ```
 
 The environment contains matched DuckDB 1.5.5 CLI and Python packages. The
-editable package install makes `lake` available through `~/.local/bin` while
+editable package install makes `lake` available in the active environment while
 keeping implementation changes under Git.
 
 This localhost deployment marks RustFS STS as unavailable in Polaris and gives
@@ -95,12 +95,15 @@ lake status --limit 20
 
 ## Query CLI
 
-The `lakehouse` launcher opens DuckDB with the Polaris catalog already attached
-and selects the `bronze` namespace by default. Its temporary credential-bearing
-startup file is mode `0600` and is removed when DuckDB exits.
+`lake query` opens DuckDB with the Polaris catalog attached and selects the
+`bronze` namespace by default. Set `DATA_PLATFORM_DUCKDB` to select a DuckDB
+executable, otherwise it uses `duckdb` from `PATH`. Its temporary credential
+file is mode `0600` on POSIX and removed after exit or interruption; Windows uses
+temporary-directory ACLs. Linux execution is tested; native Windows validation
+is pending. Forced termination can leave the startup file behind.
 
 ```bash
-lakehouse
+lake query
 ```
 
 Inside the prompt:
@@ -117,12 +120,12 @@ ORDER BY timestamp_ms DESC;
 For a single non-interactive query:
 
 ```bash
-lakehouse -c "SELECT count(*) FROM usaspending_assistance;"
+lake query -- -c "SELECT count(*) FROM usaspending_assistance;"
 ```
 
-The project copy lives at `scripts/lakehouse`; the installed command is a
-symlink in `~/.local/bin`, so improvements to the version-controlled launcher
-take effect immediately.
+On Linux/WSL, `scripts/lakehouse` remains an optional Bash wrapper around
+`python -m lake_cli query`. On native Windows, use `lake query` or the Python
+module entry point directly. The installer does not create user-bin symlinks.
 
 ## Portability
 

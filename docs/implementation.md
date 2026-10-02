@@ -66,7 +66,17 @@ The relocatable-core milestone is in progress, not complete. Implemented:
   interpreter to check argument boundaries, paths containing spaces, successful
   and failed exit codes, and absence of user-bin creation, without running pip.
 
-Verification for this increment: all 31 tests pass on Linux, and
+- `lake query` now starts DuckDB directly through `query_client.py`; the
+  optional `scripts/lakehouse` wrapper delegates to it. Executable discovery
+  uses `DATA_PLATFORM_DUCKDB` or `PATH`. The client shares catalog setup SQL
+  with ingestion and honors configured endpoints instead of a fixed health URL.
+- Query-client tests cover escaped credentials, identifier validation, shared
+  setup, discovery, argument forwarding, private POSIX file permissions, cleanup
+  after success/failure/interrupt, and service delegation without a checkout
+  script. Local DuckDB smoke tests verify output suppression and startup failure
+  without connecting to the catalog or loading extensions.
+
+Verification for this increment: all 41 tests pass on Linux, and
 `git diff --check` is clean. No live catalog
 verification is implied by these tests.
 The implementer also confirmed successful installation with the updated script.
@@ -75,12 +85,14 @@ Remaining limitations: the selected project still requires `.env`, package
 fallback assumes a source-checkout layout. This increment does not
 complete launcher portability, diagnostics, or configuration initialization.
 
-The next safe v0.2 increment is to inspect the interactive `lakehouse` and
-`lake query` execution path and plan its migration into Python, reusing shared
-settings and catalog configuration. This requires careful handling of temporary
-credentials, executable discovery, and subprocess cleanup. Initialization remains
-a separate migration; neither service startup nor storage migration is completed
-by the launcher and installer changes.
+Native Windows query execution still needs host validation. Temporary file
+protection on Windows uses the temporary directory's ACLs; force-killing the
+parent or a crash can leave a startup file behind.
+
+The next safe increment is portable configuration initialization with an
+explicit storage root, followed by container lifecycle work. Initialization
+remains a separate migration; neither service startup nor storage migration is
+completed by the launcher and query-client changes.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
 
 ## Deliberate first-version limits

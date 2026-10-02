@@ -26,12 +26,15 @@ def relation_name(settings: Settings, contract: Contract) -> str:
     )
 
 
-def attach_catalog(connection: duckdb.DuckDBPyConnection, settings: Settings) -> None:
-    connection.execute("INSTALL iceberg")
-    connection.execute("LOAD iceberg")
-    connection.execute("INSTALL httpfs")
-    connection.execute("LOAD httpfs")
-    connection.execute(f"""
+def catalog_statements(settings: Settings) -> tuple[str, ...]:
+    """Shared connection setup for Python and the interactive DuckDB client."""
+    polaris_url = settings.polaris_url.rstrip("/")
+    return (
+        "INSTALL iceberg",
+        "LOAD iceberg",
+        "INSTALL httpfs",
+        "LOAD httpfs",
+        f"""
         CREATE OR REPLACE SECRET lakehouse_s3_secret (
             TYPE s3,
             KEY_ID {sql_string(settings.s3_access_key)},
@@ -41,24 +44,30 @@ def attach_catalog(connection: duckdb.DuckDBPyConnection, settings: Settings) ->
             URL_STYLE 'path',
             USE_SSL false
         )
-    """)
-    connection.execute(f"""
+    """,
+        f"""
         CREATE OR REPLACE SECRET polaris_secret (
             TYPE iceberg,
             CLIENT_ID {sql_string(settings.client_id)},
             CLIENT_SECRET {sql_string(settings.client_secret)},
             OAUTH2_SCOPE 'PRINCIPAL_ROLE:ALL',
-            OAUTH2_SERVER_URI {sql_string(settings.polaris_url + '/api/catalog/v1/oauth/tokens')}
+            OAUTH2_SERVER_URI {sql_string(polaris_url + '/api/catalog/v1/oauth/tokens')}
         )
-    """)
-    connection.execute(f"""
+    """,
+        f"""
         ATTACH {sql_string(settings.catalog)} AS {quote_identifier(settings.catalog_alias)} (
             TYPE iceberg,
-            ENDPOINT {sql_string(settings.polaris_url + '/api/catalog')},
+            ENDPOINT {sql_string(polaris_url + '/api/catalog')},
             SECRET polaris_secret,
             ACCESS_DELEGATION_MODE 'none'
         )
-    """)
+    """,
+    )
+
+
+def attach_catalog(connection: duckdb.DuckDBPyConnection, settings: Settings) -> None:
+    for statement in catalog_statements(settings):
+        connection.execute(statement)
 
 
 def table_exists(
