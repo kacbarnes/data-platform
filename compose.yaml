@@ -1,4 +1,4 @@
-name: research-data-platform
+name: ${COMPOSE_PROJECT_NAME:-research-data-platform}
 
 x-polaris-db-environment: &polaris-db-environment
   POLARIS_PERSISTENCE_TYPE: relational-jdbc
@@ -17,7 +17,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - ${DATA_ROOT:-/home/kent/Data}/Databases/postgres/polaris:/var/lib/postgresql/data
+      - type: bind
+        source: ${DATA_ROOT:?Set DATA_ROOT with lake platform init}/Databases/postgres/polaris
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -29,8 +33,8 @@ services:
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     restart: unless-stopped
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:${RUSTFS_PORT:-9000}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9001}:9001"
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
@@ -39,7 +43,11 @@ services:
       RUSTFS_CONSOLE_ENABLE: "true"
       RUSTFS_CONSOLE_ADDRESS: ":9001"
     volumes:
-      - ${DATA_ROOT:-/home/kent/Data}/DataLake/warehouse:/data
+      - type: bind
+        source: ${DATA_ROOT:?Set DATA_ROOT with lake platform init}/DataLake/warehouse
+        target: /data
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://127.0.0.1:9000/health"]
       interval: 10s
@@ -88,8 +96,8 @@ services:
       bucket-setup:
         condition: service_completed_successfully
     ports:
-      - "127.0.0.1:8181:8181"
-      - "127.0.0.1:8182:8182"
+      - "127.0.0.1:${POLARIS_PORT:-8181}:8181"
+      - "127.0.0.1:${POLARIS_HEALTH_PORT:-8182}:8182"
     environment:
       <<: *polaris-db-environment
       AWS_REGION: us-west-2
@@ -119,6 +127,7 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       ICEBERG_BUCKET: ${ICEBERG_BUCKET}
+      RUSTFS_CLIENT_ENDPOINT: ${RUSTFS_CLIENT_ENDPOINT:-localhost:9000}
     volumes:
       - ./scripts/bootstrap_catalog.py:/bootstrap_catalog.py:ro
     command: ["python", "/bootstrap_catalog.py"]

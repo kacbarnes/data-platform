@@ -84,8 +84,8 @@ configuration rules above; the wrapper does not force its own checkout root.
 
 On native Windows, use the installed `lake` command or `python -m lake_cli`
 instead of the Bash wrapper. The optional `scripts/lakehouse` wrapper likewise
-invokes the Python CLI's `query` command. Initialization still requires
-portability work.
+invokes the Python CLI's `query` command. `scripts/init-platform` now delegates
+to configuration-only `lake platform init`; run `lake platform up` separately.
 
 ### Installing into a user-owned environment
 
@@ -105,6 +105,29 @@ administrator privileges. Package installation generates the `lake` entry point
 inside that environment. The installer no longer creates or replaces
 `~/.local/bin/lake`; any existing symlink is left untouched. Installation does
 not initialize services, create a data root, or migrate stored data.
+
+## Platform configuration and services
+
+```bash
+lake platform init --data-root /path/to/storage --backend docker
+lake platform doctor
+lake platform up
+lake platform status
+lake platform logs --tail 100
+lake platform down
+```
+
+Choose `--backend podman` for Podman. `init` creates private configuration and
+directories without starting containers; existing credentials are preserved.
+`up` bootstraps fresh storage and records completed steps so normal startup
+does not repeat bootstrap. `down` preserves data. Global `--json` provides a
+JSON result/error envelope. For legacy state without lifecycle checkpoints,
+`up --existing` starts services without bootstrap using the original credentials.
+
+Use `--project-root` before `platform` to select a checkout from outside it.
+Storage and deployment configuration are independent of the Python interpreter.
+See [platform setup](platform.md) for Windows commands, port selection,
+permissions, retry behavior, diagnostics, and testing evidence.
 
 ## Dataset contracts
 

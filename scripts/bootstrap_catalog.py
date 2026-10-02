@@ -25,7 +25,7 @@ def request(path, *, method="GET", token=None, body=None, form=None):
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:
             payload = response.read()
             return response.status, json.loads(payload) if payload else None
     except urllib.error.HTTPError as exc:
@@ -33,7 +33,7 @@ def request(path, *, method="GET", token=None, body=None, form=None):
         return exc.code, json.loads(payload) if payload else None
 
 
-_, token_response = request(
+token_status, token_response = request(
     "/api/catalog/v1/oauth/tokens",
     method="POST",
     form={
@@ -43,12 +43,14 @@ _, token_response = request(
         "scope": "PRINCIPAL_ROLE:ALL",
     },
 )
+if token_status != 200 or not token_response or "access_token" not in token_response:
+    raise SystemExit(f"Polaris authentication failed ({token_status}); check configured credentials")
 token = token_response["access_token"]
 
 status, _ = request(f"/api/management/v1/catalogs/{CATALOG}", token=token)
 if status == 200:
     print(f"Catalog {CATALOG!r} already exists; no change needed.")
-else:
+elif status == 404:
     status, response = request(
         "/api/management/v1/catalogs",
         method="POST",
@@ -64,7 +66,7 @@ else:
                 "storageConfigInfo": {
                     "storageType": "S3",
                     "allowedLocations": [f"s3://{os.environ['ICEBERG_BUCKET']}"],
-                    "endpoint": "http://localhost:9000",
+                    "endpoint": "http://" + os.environ.get("RUSTFS_CLIENT_ENDPOINT", "localhost:9000"),
                     "endpointInternal": "http://rustfs:9000",
                     "pathStyleAccess": True,
                     "region": "us-west-2",
@@ -76,6 +78,8 @@ else:
     if status not in (200, 201):
         raise SystemExit(f"Catalog creation failed ({status}): {response}")
     print(f"Created Polaris catalog {CATALOG!r}.")
+else:
+    raise SystemExit(f"Catalog lookup failed ({status}); refusing to create over an unknown state")
 
 # A Polaris service administrator can create catalogs but does not implicitly
 # receive data-plane privileges within them. Bind an explicit catalog role to
@@ -108,3 +112,14 @@ status, response = request(
 if status not in (200, 201, 204, 409):
     raise SystemExit(f"Catalog privilege grant failed ({status}): {response}")
 print(f"Catalog role {catalog_role!r} has content-management privileges.")
+
+# A fresh catalog needs the namespace selected by the interactive query client.
+for namespace in ("bronze", "silver", "gold"):
+    status, response = request(
+        f"/api/catalog/v1/{urllib.parse.quote(CATALOG, safe='')}/namespaces",
+        method="POST", token=token,
+        body={"namespace": [namespace], "properties": {}},
+    )
+    if status not in (200, 201, 409):
+        raise SystemExit(f"Namespace creation failed ({status}): {response}")
+print("Logical bronze, silver, and gold namespaces are ready.")

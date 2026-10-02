@@ -10,6 +10,7 @@
 | Durable table objects | RustFS | Iceberg warehouse bind mount |
 | Contracts and transformations | Git | This repository |
 | Runs, lineage, and quality results | `lake` CLI | `${DATA_ROOT}/Databases/duckdb/control.duckdb` |
+| Platform bootstrap and lifecycle operations | `lake platform` | `${DATA_ROOT}/.data-platform` journals and checkpoints |
 | Interactive analysis | DuckDB CLI | `lake query` (optional `lakehouse` wrapper) |
 
 Nothing except the object-store service may write directly to `warehouse`.
@@ -21,6 +22,14 @@ startup file, subprocess execution, and cleanup. It reuses `Settings` and the
 catalog setup statements used by Python ingestion. The Linux/WSL `lakehouse`
 script is a thin compatibility wrapper; native Windows uses `lake query` or
 `python -m lake_cli ... query` directly. Container startup is separate.
+
+The Python platform module owns private configuration initialization and invokes
+Docker/Podman Compose for service lifecycle. Configuration selects the checkout,
+storage parent, backend, project name, and ports. Lifecycle checkpoints prevent
+routine startup from repeating completed bootstrap steps; operational JSON
+journals record both successful and failed attempts. They do not duplicate
+Iceberg table metadata or dataset-run records. Shutdown preserves bind-mounted
+storage, and storage relocation requires a separate migration procedure.
 
 ## Data lifecycle
 

@@ -89,11 +89,44 @@ Native Windows query execution still needs host validation. Temporary file
 protection on Windows uses the temporary directory's ACLs; force-killing the
 parent or a crash can leave a startup file behind.
 
-The next safe increment is portable configuration initialization with an
-explicit storage root, followed by container lifecycle work. Initialization
-remains a separate migration; neither service startup nor storage migration is
-completed by the launcher and query-client changes.
+Portable initialization and container lifecycle have now been implemented as
+the increment below. Native Windows qualification and broader diagnostics
+remain pending; storage migration is not implemented.
 See [the v0.2 plan](roadmap/v0.2-relocatable-core.md) for the remaining scope.
+
+## Portable initialization and container lifecycle increment
+
+- `lake platform init` creates private credentials and directories beneath an
+  explicit storage parent, with configurable Docker/Podman backend, Compose
+  project identity, and host ports. Existing configuration is preserved.
+- `up`, `down`, `status`, `logs`, and `doctor` invoke Compose using argument
+  arrays and the resolved platform settings. Runtime errors and logs redact
+  configured secrets. Shutdown never requests volume deletion.
+- Bootstrap checkpoints and per-attempt JSON journals under
+  `${DATA_ROOT}/.data-platform` record operation status, step progress, timestamps,
+  errors, and deployment hashes. A lock prevents concurrent lifecycle changes.
+  These records are the authority for platform bootstrap operations; the
+  DuckDB control tables remain the authority for dataset publication.
+- Fresh bootstrap creates catalog privileges and bronze/silver/gold namespaces.
+  Incomplete steps can be retried; completed steps are skipped. Legacy state
+  requires explicit `up --existing` and original credentials, without bootstrap.
+- Compose storage paths use long-form bind mounts and require `DATA_ROOT`;
+  `scripts/init-platform` is a configuration-only Python wrapper. No runtime
+  script or Compose storage default depends on a particular user home.
+
+Verification: 56 tests pass on Linux, including real Compose parsing and mocked
+Docker/Podman lifecycle/failure cases. A separate Docker project on alternate
+ports passed fresh startup, authentication, namespace checks, DuckDB attachment,
+repeat startup, and shutdown preserving data. The desktop's existing stack was
+not changed. Temporary test data/journals remain beneath
+`/tmp/data-platform-smoke-3wsaz0TS/storage`. The initial image pull hit a local
+credential-helper timeout; an empty temporary Docker configuration enabled the
+successful public-image retry without altering user credentials.
+
+Limitations: live Podman/native Windows and external-drive VM sharing are not
+validated here; Apptainer, storage migration, credential rotation, automatic
+runtime setup, and full container-permission diagnostics remain outside this
+increment. See [platform setup](platform.md) for deployment steps and caveats.
 
 ## Deliberate first-version limits
 

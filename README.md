@@ -11,34 +11,44 @@ See [`ROADMAP.md`](ROADMAP.md) for the portability and packaging milestones and
 - **Polaris 1.7.0**: Iceberg REST catalog and authorization boundary.
 - **PostgreSQL 17**: persistent Polaris metastore.
 - **RustFS**: local S3-compatible object storage, bind-mounted at
-  `/home/kent/Data/DataLake/warehouse`.
+  `${DATA_ROOT}/DataLake/warehouse`.
 - **DuckDB**: ingestion, validation, querying, and the operational control DB at
-  `/home/kent/Data/Databases/duckdb/control.duckdb`.
+  `${DATA_ROOT}/Databases/duckdb/control.duckdb`.
 
 Only source files belong in `landing`, `raw`, or `Archive`. Never manually edit
 anything in `warehouse`; Iceberg and its catalog own that tree.
 
 ## First-time setup
 
-Docker must be running and `docker info` must succeed for your user.
+Install the Python environment and package first. Docker or Podman, with a
+working Compose provider, must already be available to your user.
 
 ```bash
-cd /home/kent/Projects/data-platform
-./scripts/init-platform
 mamba env create -f environment.yml
+mamba activate data-platform
+python -m pip install --no-deps --no-build-isolation --editable .
+lake platform init --data-root "$HOME/Data" --backend docker
+lake platform doctor
+lake platform up
 ```
 
-`init-platform` creates an untracked `.env` with random local credentials,
-bootstraps the PostgreSQL-backed Polaris realm, creates the object-store bucket,
-and creates the `research` catalog. It should be run only once for a new storage
-root. Normal subsequent operation is:
+`init` creates private `.env` configuration and directories under your selected
+storage parent. `up` starts services and bootstraps a fresh instance, with
+checkpoints for safe retries. Repeating `init` preserves credentials; subsequent
+`up` runs skip completed bootstrap steps. Normal operation is:
 
 ```bash
-docker compose up -d
-docker compose ps
+lake platform up
+lake platform status
+lake platform down
 ```
 
-Endpoints are bound to localhost:
+See [platform setup](docs/platform.md) for native Windows/Podman commands,
+external-drive configuration, alternate ports, legacy-instance startup, retry
+records, and validation limitations. Linux/Docker was tested with a fresh
+isolated stack; Windows/Podman still requires host validation.
+
+Default endpoints are bound to localhost:
 
 - Polaris REST catalog: `http://localhost:8181/api/catalog`
 - Polaris health: `http://localhost:8182/q/health`
@@ -48,7 +58,6 @@ Endpoints are bound to localhost:
 ## Install the platform CLI
 
 ```bash
-cd /home/kent/Projects/data-platform
 mamba env update -n data-platform -f environment.yml --prune
 ./scripts/install-cli
 ```

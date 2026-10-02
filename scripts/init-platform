@@ -1,40 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-
-if [[ ! -f .env ]]; then
-  umask 077
-  random_secret() { openssl rand -hex 24; }
-  cat >.env <<EOF
-DATA_ROOT=/home/kent/Data
-POLARIS_REALM=POLARIS
-POLARIS_ROOT_CLIENT_ID=root
-POLARIS_ROOT_CLIENT_SECRET=$(random_secret)
-POLARIS_CATALOG=research
-POSTGRES_USER=polaris
-POSTGRES_PASSWORD=$(random_secret)
-POSTGRES_DB=polaris
-RUSTFS_ACCESS_KEY=research_lake
-RUSTFS_SECRET_KEY=$(random_secret)
-ICEBERG_BUCKET=research-lakehouse
-EOF
-  echo "Created private .env credentials."
+PYTHON_BIN="${DATA_PLATFORM_PYTHON:-python}"
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "init-platform: activate your Python environment or set DATA_PLATFORM_PYTHON" >&2
+  exit 1
 fi
 
-set -a
-source .env
-set +a
-DATA_ROOT="${DATA_ROOT:-/home/kent/Data}"
-
-mkdir -p \
-  "${DATA_ROOT}/DataLake/warehouse" \
-  "${DATA_ROOT}/Databases/postgres/polaris" \
-  "${DATA_ROOT}/Databases/duckdb"
-
-docker compose up -d postgres rustfs
-docker compose --profile bootstrap run --rm polaris-bootstrap
-docker compose up -d polaris
-docker compose --profile bootstrap run --rm catalog-setup
-
-echo "Platform initialized. Polaris: http://localhost:8181; RustFS UI: http://localhost:9001"
+# Initialization creates configuration only; startup is an explicit second step.
+exec "${PYTHON_BIN}" -m lake_cli platform init "$@"
