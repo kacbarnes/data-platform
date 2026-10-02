@@ -17,11 +17,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - type: bind
-        source: ${DATA_ROOT:?Set DATA_ROOT with lake platform init}/Databases/postgres/polaris
+      - type: ${POSTGRES_STORAGE_TYPE:-bind}
+        source: ${POSTGRES_STORAGE_SOURCE:-${DATA_ROOT:?Set DATA_ROOT with lake platform init}/Databases/postgres/polaris}
         target: /var/lib/postgresql/data
-        bind:
-          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -131,3 +129,6 @@ services:
     volumes:
       - ./scripts/bootstrap_catalog.py:/bootstrap_catalog.py:ro
     command: ["python", "/bootstrap_catalog.py"]
+
+volumes:
+  postgres-data:

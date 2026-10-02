@@ -62,6 +62,8 @@ def parser() -> argparse.ArgumentParser:
     init = actions.add_parser("init", help="create private configuration and storage directories")
     init.add_argument("--data-root", type=Path, help="storage parent; defaults to DATA_ROOT or ~/Data")
     init.add_argument("--backend", choices=("docker", "podman"))
+    init.add_argument("--postgres-storage", choices=("bind", "volume"),
+                      help="PostgreSQL storage; Windows defaults to a Linux-backed named volume")
     init.add_argument("--project-name")
     for option in ("polaris-port", "polaris-health-port", "rustfs-port", "rustfs-console-port"):
         init.add_argument("--" + option, type=int)
@@ -123,7 +125,8 @@ def main(argv: list[str] | None = None) -> int:
                     "RUSTFS_CONSOLE_PORT": args.rustfs_console_port,
                 }.items() if value is not None}
                 result = initialize(args.project_root, data_root=args.data_root,
-                                    backend=args.backend, project_name=args.project_name, ports=ports)
+                                    backend=args.backend, project_name=args.project_name, ports=ports,
+                                    postgres_storage=args.postgres_storage)
             else:
                 platform = Platform(args.project_root)
                 if args.platform_action == "up":

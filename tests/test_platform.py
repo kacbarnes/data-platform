@@ -24,6 +24,8 @@ def project(tmp_path, monkeypatch):
     for key in (*PORTS, "DATA_ROOT", "PLATFORM_BACKEND", "COMPOSE_PROJECT_NAME",
                 "POLARIS_ROOT_CLIENT_SECRET", "POSTGRES_PASSWORD", "RUSTFS_SECRET_KEY"):
         monkeypatch.delenv(key, raising=False)
+    for key in ("POSTGRES_STORAGE", "POSTGRES_STORAGE_TYPE", "POSTGRES_STORAGE_SOURCE"):
+        monkeypatch.delenv(key, raising=False)
     return root
 
 
@@ -71,10 +73,10 @@ def test_windows_path_is_single_compose_mount():
     import yaml
     document = yaml.safe_load((Path(__file__).resolve().parents[1] / "compose.yaml").read_text())
     mount = document["services"]["postgres"]["volumes"][0]
-    assert mount["type"] == "bind"
+    assert mount["type"] == "${POSTGRES_STORAGE_TYPE:-bind}"
     assert mount["target"] == "/var/lib/postgresql/data"
     assert "DATA_ROOT" in mount["source"]
-    assert mount["bind"]["create_host_path"] is False
+    assert "postgres-data" in document["volumes"]
 
 
 @pytest.mark.parametrize("backend", ["docker", "podman"])
@@ -190,11 +192,12 @@ def test_doctor_is_read_only_and_cli_json(project, monkeypatch, capsys):
     assert {p: p.read_bytes() for p in platform.state_dir.glob("*")} == before
 
 
-def test_compose_configuration_with_real_docker(project):
+@pytest.mark.parametrize("storage", ["bind", "volume"])
+def test_compose_configuration_with_real_docker(project, storage):
     executable = shutil.which("docker")
     if executable is None:
         pytest.skip("Docker is not installed")
-    initialize(project, data_root=Path("data files"))
+    initialize(project, data_root=Path("data files"), postgres_storage=storage)
     result = subprocess.run(
         [executable, "compose", "--env-file", str(project / ".env"),
          "-f", str(project / "compose.yaml"), "config", "--quiet"],
@@ -261,3 +264,89 @@ def test_legacy_data_root_default_and_environment_ports(project, tmp_path, monke
     lines = (project / ".env").read_text().splitlines()
     (project / ".env").write_text("\n".join(line for line in lines if not line.startswith("DATA_ROOT=")))
     assert Platform(project).data_root == tmp_path / "Data"
+
+
+def test_storage_selection_and_existing_config_preserved(project, monkeypatch):
+    monkeypatch.setattr("lake_cli.platform._default_postgres_storage", lambda: "volume")
+    initialize(project, data_root=Path("data"), backend="podman")
+    platform = Platform(project)
+    assert platform.postgres_storage == "volume"
+    assert platform.environment["POSTGRES_STORAGE_SOURCE"] == "postgres-data"
+    original = (project / ".env").read_bytes()
+    with pytest.raises(LakeError, match="does not migrate"):
+        initialize(project, postgres_storage="bind")
+    assert (project / ".env").read_bytes() == original
+    monkeypatch.setenv("POSTGRES_STORAGE", "invalid")
+    with pytest.raises(LakeError, match="bind or volume"):
+        Platform(project)
+
+
+def test_failed_legacy_bind_can_retry_empty_volume(project, monkeypatch):
+    initialize(project, data_root=Path("data"))
+    old = Platform(project)
+    old.state_file.write_text(json.dumps({"fingerprint": old._fingerprint(), "steps": []}))
+    monkeypatch.setenv("POSTGRES_STORAGE", "volume")
+    platform = Platform(project)
+    monkeypatch.setattr(platform, "_volume_exists", lambda: False)
+    fake_runtime(platform, monkeypatch)
+    platform.up()
+    assert json.loads(platform.state_file.read_text())["postgres_storage"] == "volume"
+    monkeypatch.setattr(platform, "_volume_exists", lambda: True)
+    calls = fake_runtime(platform, monkeypatch)
+    platform.up()
+    assert not any("run" in c for c in calls)
+    platform.down()
+    assert ["down"] in calls
+    assert not any("--volumes" in c for c in calls)
+    monkeypatch.setattr(platform, "_volume_exists", lambda: False)
+    with pytest.raises(LakeError, match="volume is missing"):
+        platform.up()
+
+
+@pytest.mark.parametrize("kind", ["completed", "files", "recorded"])
+def test_storage_change_never_abandons_database(project, monkeypatch, kind):
+    initialize(project, data_root=Path("data"))
+    old = Platform(project)
+    state = {"fingerprint": old._fingerprint(), "steps": []}
+    if kind == "completed":
+        state["steps"] = ["realm"]
+    elif kind == "files":
+        (old.data_root / "Databases/postgres/polaris/PG_VERSION").write_text("17")
+    else:
+        state["postgres_storage"] = "bind"
+    old.state_file.write_text(json.dumps(state))
+    monkeypatch.setenv("POSTGRES_STORAGE", "volume")
+    platform = Platform(project)
+    calls = fake_runtime(platform, monkeypatch)
+    with pytest.raises(LakeError, match="migration"):
+        platform.up()
+    assert not any("up" in c for c in calls)
+
+
+def test_untracked_volume_refused_and_inspection_errors(project, monkeypatch):
+    initialize(project, data_root=Path("data"), postgres_storage="volume")
+    platform = Platform(project)
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda _: "podman")
+    monkeypatch.setattr("lake_cli.platform.subprocess.run", lambda *a, **k:
+                        subprocess.CompletedProcess(a, 0, platform.project_name + "_postgres-data\n", ""))
+    assert platform._volume_exists()
+    calls = fake_runtime(platform, monkeypatch)
+    with pytest.raises(LakeError, match="untracked PostgreSQL volume"):
+        platform.up()
+    assert not any("up" in c for c in calls)
+    monkeypatch.setattr("lake_cli.platform.subprocess.run", lambda *a, **k:
+                        subprocess.CompletedProcess(a, 1, "", "runtime unavailable"))
+    with pytest.raises(LakeError, match="runtime connection"):
+        platform._volume_exists()
+
+
+def test_windows_doctor_rejects_bind_without_touching_storage(project, monkeypatch):
+    initialize(project, data_root=Path("data"), postgres_storage="bind")
+    monkeypatch.setattr("lake_cli.platform._windows_host", lambda: True)
+    platform = Platform(project)
+    calls = fake_runtime(platform, monkeypatch)
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda _: "podman")
+    assert not platform.doctor()["ok"]
+    with pytest.raises(LakeError, match="POSIX permissions"):
+        platform.up()
+    assert not any("up" in c for c in calls)

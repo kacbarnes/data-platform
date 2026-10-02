@@ -122,6 +122,11 @@ lake platform down
 
 Choose `--backend podman` for Podman. `init` creates private configuration and
 directories without starting containers; existing credentials are preserved.
+`--postgres-storage bind|volume` selects database storage. Fresh Windows defaults
+to a Linux-backed runtime volume; Linux defaults to a bind mount. Existing
+configuration is not silently migrated. Windows bind mode fails diagnostics and
+startup rather than accepting host writability as sufficient. Volume mode needs
+a separate catalog backup; copying `DATA_ROOT` alone is incomplete.
 `up` bootstraps fresh storage and records completed steps so normal startup
 does not repeat bootstrap. `down` preserves data. Global `--json` provides a
 JSON result/error envelope. For legacy state without lifecycle checkpoints,

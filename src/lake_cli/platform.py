@@ -48,12 +48,21 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _default_postgres_storage() -> str:
+    return "volume" if _windows_host() else "bind"
+
+
+def _windows_host() -> bool:
+    return os.name == "nt"
+
+
 def initialize(
     project_root: Path | None,
     *, data_root: Path | None = None,
     backend: str | None = None,
     project_name: str | None = None,
     ports: dict[str, int] | None = None,
+    postgres_storage: str | None = None,
 ) -> dict:
     root = discover_project_root(project_root)
     if not (root / "compose.yaml").is_file():
@@ -69,6 +78,8 @@ def initialize(
             raise LakeError("existing Compose project name differs")
         if ports and any(str(v) != platform.values[k] for k, v in ports.items()):
             raise LakeError("existing port configuration differs")
+        if postgres_storage is not None and postgres_storage != platform.postgres_storage:
+            raise LakeError("existing PostgreSQL storage differs; initialization does not migrate databases")
         return {"created": False, "project_root": str(root), "data_root": str(platform.data_root),
                 "backend": platform.backend, "message": "Existing configuration preserved; no bootstrap performed"}
     selected_backend = backend or os.environ.get("PLATFORM_BACKEND", "docker")
@@ -85,6 +96,9 @@ def initialize(
         "research-lake-" + hashlib.sha256(str(storage).encode()).hexdigest()[:10]
     )
     _validate_name(name)
+    selected_storage = postgres_storage or os.environ.get("POSTGRES_STORAGE") or _default_postgres_storage()
+    if selected_storage not in ("bind", "volume"):
+        raise LakeError("POSTGRES_STORAGE must be bind or volume")
     # Never generate new credentials over an existing metastore or warehouse.
     for relative in ("Databases/postgres/polaris", "DataLake/warehouse"):
         directory = storage / relative
@@ -93,6 +107,10 @@ def initialize(
     _prepare_directories(storage)
     values = {
         "DATA_ROOT": storage.as_posix(), "PLATFORM_BACKEND": selected_backend,
+        "POSTGRES_STORAGE": selected_storage,
+        "POSTGRES_STORAGE_TYPE": selected_storage,
+        "POSTGRES_STORAGE_SOURCE": "postgres-data" if selected_storage == "volume" else
+            (storage / "Databases/postgres/polaris").as_posix(),
         "COMPOSE_PROJECT_NAME": name, "POLARIS_REALM": "POLARIS",
         "POLARIS_ROOT_CLIENT_ID": "root", "POLARIS_ROOT_CLIENT_SECRET": secrets.token_hex(24),
         "POLARIS_CATALOG": "research", "POSTGRES_USER": "polaris", "POSTGRES_DB": "polaris",
@@ -146,7 +164,7 @@ class Platform:
         self.root = discover_project_root(project_root)
         self.values = {**_read_env(self.root / ".env")}
         for key in (*REQUIRED, *PORTS, "DATA_ROOT", "PLATFORM_BACKEND", "COMPOSE_PROJECT_NAME",
-                    "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT"):
+                    "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT", "POSTGRES_STORAGE"):
             if key in os.environ:
                 self.values[key] = os.environ[key]
         for key in REQUIRED:
@@ -162,6 +180,15 @@ class Platform:
             raise LakeError("PLATFORM_BACKEND must be docker or podman")
         self.project_name = self.values.get("COMPOSE_PROJECT_NAME", "research-data-platform")
         _validate_name(self.project_name)
+        # Legacy installations retain their original mount until explicitly changed.
+        self.postgres_storage = self.values.get("POSTGRES_STORAGE", "bind")
+        if self.postgres_storage not in ("bind", "volume"):
+            raise LakeError("POSTGRES_STORAGE must be bind or volume")
+        self.values["POSTGRES_STORAGE_TYPE"] = self.postgres_storage
+        self.values["POSTGRES_STORAGE_SOURCE"] = (
+            "postgres-data" if self.postgres_storage == "volume" else
+            (self.data_root / "Databases/postgres/polaris").as_posix()
+        )
         for key, default in PORTS.items():
             self.values.setdefault(key, str(default))
         _validate_ports({k: self.values[k] for k in PORTS})
@@ -214,8 +241,34 @@ class Platform:
                 raise LakeError("bootstrap journal is invalid; restore or review it before retrying") from exc
             if state.get("fingerprint") != self._fingerprint():
                 raise LakeError("storage/configuration identity changed; use an explicit migration procedure")
+            previous_storage = state.get("postgres_storage", "bind")
+            if previous_storage != self.postgres_storage:
+                # Permit recovery only from pre-feature, empty failed initialization.
+                if ("postgres_storage" in state or state["steps"] or
+                        any((self.data_root / "Databases/postgres/polaris").iterdir())):
+                    raise LakeError("PostgreSQL storage changed; explicit database migration is required")
+                if self._volume_exists():
+                    raise LakeError("untracked PostgreSQL volume exists; restore original configuration")
+            state["postgres_storage"] = self.postgres_storage
             return state
-        return {"fingerprint": self._fingerprint(), "steps": []}
+        return {"fingerprint": self._fingerprint(), "steps": [],
+                "postgres_storage": self.postgres_storage}
+
+    def _volume_exists(self) -> bool:
+        executable = shutil.which(self.backend)
+        if executable is None:
+            raise LakeError(f"{self.backend} is not installed or not on PATH")
+        # Listing distinguishes an absent volume from a broken runtime connection.
+        try:
+            result = subprocess.run(
+                [executable, "volume", "ls", "--format", "{{.Name}}"],
+                env=self.environment, capture_output=True, text=True, check=False, timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise LakeError("could not inspect PostgreSQL volumes") from exc
+        if result.returncode:
+            raise LakeError("could not inspect PostgreSQL volumes; check runtime connection")
+        return f"{self.project_name}_postgres-data" in result.stdout.splitlines()
 
     @contextmanager
     def _operation(self, action: str):
@@ -223,6 +276,7 @@ class Platform:
         lock = self.state_dir / "operation.lock"
         run = {"run_id": str(uuid.uuid4()), "action": action, "started_at": _now(),
                "status": "running", "project_name": self.project_name, "steps": []}
+        run["postgres_storage"] = self.postgres_storage
         run["compose_sha256"] = hashlib.sha256((self.root / "compose.yaml").read_bytes()).hexdigest()
         bootstrap_script = self.root / "scripts/bootstrap_catalog.py"
         if bootstrap_script.is_file():
@@ -251,11 +305,19 @@ class Platform:
         self._run(["config", "--quiet"], timeout=30)
         with self._operation("up") as run:
             state = self._state()
+            if state["steps"] and self.postgres_storage == "volume" and not self._volume_exists():
+                raise LakeError("initialized PostgreSQL volume is missing; restore it before startup")
+            if self.postgres_storage == "volume" and any((self.data_root / "Databases/postgres/polaris").iterdir()):
+                raise LakeError("bind-mounted PostgreSQL files exist; explicit database migration is required")
+            if self.postgres_storage == "bind" and _windows_host():
+                raise LakeError("Windows PostgreSQL bind storage cannot guarantee POSIX permissions; use POSTGRES_STORAGE=volume (existing databases require migration)")
             if not self.state_file.exists() and not existing:
                 postgres = self.data_root / "Databases/postgres/polaris"
                 warehouse = self.data_root / "DataLake/warehouse"
                 if any(postgres.iterdir()) or any(warehouse.iterdir()):
                     raise LakeError("untracked existing storage; restore original credentials and use up --existing for normal startup only")
+                if self.postgres_storage == "volume" and self._volume_exists():
+                    raise LakeError("untracked PostgreSQL volume exists; restore original configuration")
                 # Record identity before launching containers so partial failure
                 # can be retried even when storage has become non-empty.
                 _atomic_json(self.state_file, state)
@@ -266,6 +328,8 @@ class Platform:
                             probe.bind(("127.0.0.1", int(self.values[key])))
                         except OSError as exc:
                             raise LakeError(f"host port {self.values[key]} is occupied ({key})") from exc
+            if self.state_file.exists():
+                _atomic_json(self.state_file, state)
             if existing and not self.state_file.exists():
                 self._run(["up", "-d", "postgres", "rustfs", "polaris"])
                 run["steps"].append("existing services started without bootstrap")
@@ -323,10 +387,13 @@ class Platform:
 
     def doctor(self) -> dict:
         checks = {"compose_file": (self.root / "compose.yaml").is_file(),
+                  "postgres_storage_compatible": not (_windows_host() and self.postgres_storage == "bind"),
                   "storage_exists": self.data_root.is_dir(),
                   "storage_writable": os.access(self.data_root, os.W_OK),
                   "runtime_executable": shutil.which(self.backend) is not None}
         errors = []
+        if not checks["postgres_storage_compatible"]:
+            errors.append("Windows PostgreSQL needs Linux-backed volume storage; host writability is insufficient")
         occupied = []
         for key in PORTS:
             with socket.socket() as probe:
@@ -347,5 +414,6 @@ class Platform:
             errors.append(str(exc))
         return {"ok": all(checks.values()), "checks": checks, "errors": errors,
                 "backend": self.backend, "data_root": str(self.data_root),
+                "postgres_storage": self.postgres_storage,
                 "occupied_ports": occupied,
                 "free_bytes": shutil.disk_usage(self.data_root).free if self.data_root.is_dir() else None}

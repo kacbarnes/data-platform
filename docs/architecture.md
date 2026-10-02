@@ -29,7 +29,11 @@ storage parent, backend, project name, and ports. Lifecycle checkpoints prevent
 routine startup from repeating completed bootstrap steps; operational JSON
 journals record both successful and failed attempts. They do not duplicate
 Iceberg table metadata or dataset-run records. Shutdown preserves bind-mounted
-storage, and storage relocation requires a separate migration procedure.
+storage and named volumes, and storage relocation requires a separate migration
+procedure. PostgreSQL uses a host bind mount on Linux by default, and a
+runtime-managed Linux-backed named volume on native Windows. The latter places
+catalog authority outside `DATA_ROOT`: complete backup/transfer requires a
+database dump alongside warehouse objects, configuration and operational records.
 
 ## Data lifecycle
 

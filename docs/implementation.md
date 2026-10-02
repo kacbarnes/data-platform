@@ -155,6 +155,16 @@ virtual environment installs successfully, passes `pip check`, reports CLI
 
 ## Next safe increments
 
+Windows PostgreSQL correction: native Windows initialization now selects a
+Linux-backed named volume instead of a Windows bind mount. Linux and legacy
+configurations retain bind mode. Storage mode is checkpointed and journaled;
+switching an initialized catalog or adopting an untracked volume is rejected.
+Older failed initialization may recover only with empty bind storage and no
+completed bootstrap steps. Missing initialized volumes fail safely. Doctor
+flags native Windows bind mode; runtime permissions and external warehouse
+mounts still need laptop verification. See platform setup for recovery and
+catalog backup implications.
+
 1. Add a real silver USAspending contract after column-level profiling and
    domain review.
 2. Add multi-file deliveries with a source-file manifest and watermark policy.

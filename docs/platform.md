@@ -76,10 +76,61 @@ Directories are created beneath that parent:
 ```text
 DataLake/landing/
 DataLake/warehouse/            # Iceberg/object-store owned
-Databases/postgres/polaris/    # Polaris metastore
+Databases/postgres/polaris/    # Polaris metastore only in bind mode
 Databases/duckdb/              # operational control database
 .data-platform/               # lifecycle journal and checkpoints
 ```
+
+PostgreSQL storage is selected with `init --postgres-storage bind|volume` or
+`POSTGRES_STORAGE`. Fresh native Windows installations default to `volume`;
+Linux defaults to `bind`. Existing `.env` files without this setting retain
+`bind`. Volume mode stores the catalog in the runtime's Linux-backed named
+volume `<project-name>_postgres-data`, not under `DATA_ROOT`. `down` preserves
+this volume; never use `compose down --volumes` or prune it. Changing runtime,
+project name, or deleting the runtime VM can disconnect or destroy that catalog.
+Moving to another NTFS drive does not reliably provide PostgreSQL's required
+POSIX ownership and permissions. Native Windows bind mode is rejected by `up`
+and flagged by `doctor`. WSL/Linux bind mounts still require a suitable filesystem.
+
+### Recovering the earlier Windows permission failure
+
+Stop the old services with the original configuration first:
+
+```powershell
+python -m lake_cli platform down
+```
+
+In the checkout's existing `.env`, add `POSTGRES_STORAGE='volume'`. Preserve
+all credentials, paths, project name and lifecycle records; do not rerun fresh
+initialization or delete files. Then run `platform doctor` and `platform up`.
+The CLI derives the mount type/source from this setting. Recovery is permitted
+only for an older checkpoint with no completed bootstrap steps and an empty
+old PostgreSQL directory, and only if the target volume does not already exist.
+If these guards reject recovery, an explicit reviewed migration is required.
+Do not bypass them by deleting the checkpoint. Direct Compose users must also
+set `POSTGRES_STORAGE_TYPE='volume'` and `POSTGRES_STORAGE_SOURCE='postgres-data'`;
+new initialization writes all three settings consistently.
+
+### Catalog backups in volume mode
+
+A copy of `DATA_ROOT` alone is **not a complete lakehouse backup**. Preserve the
+PostgreSQL catalog too. With services running, these PowerShell commands create
+a custom-format database dump without exposing credentials or piping binary
+output through PowerShell:
+
+```powershell
+# Substitute your actual project name from platform status.
+$pgContainer = 'research-lake-75824576d1-postgres-1'
+podman exec $pgContainer sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /tmp/polaris-backup.dump'
+podman cp "${pgContainer}:/tmp/polaris-backup.dump" ./polaris-backup.dump
+```
+
+Check each command's exit code. Store the dump securely with the original private
+configuration and a consistent warehouse backup. Quiesce ingestion/publication
+during coordinated backups; a database dump alone contains no table objects.
+Restore requires a deliberate `pg_restore` procedure into the intended database;
+do not run fresh bootstrap over a restored catalog. This increment does not
+automate backup/restore or migration.
 
 Credentials are generated with Python's cryptographic random generator and
 never printed. `.env` is created exclusively, with mode `0600` on POSIX; Windows
@@ -168,6 +219,13 @@ The test did not modify the desktop's existing lakehouse. Docker's local
 credential helper initially timed out; the retry used an empty temporary Docker
 configuration for public image pulls, without changing the user's configuration.
 Test state was preserved at `/tmp/data-platform-smoke-3wsaz0TS/storage`.
+
+The PostgreSQL volume correction was separately exercised on Linux/Docker:
+Compose parsing passed for both storage modes; a real PostgreSQL 17 named-volume
+instance accepted read-only queries before and after restart, and shutdown
+preserved its volume. Test state remains at
+`/tmp/lake-pg-volume-smoke-_gjhuhyz`; no existing lakehouse was modified.
+Native Windows/Podman filesystem behavior still needs laptop verification.
 
 Official runtime references: [Podman Compose](https://docs.podman.io/en/stable/markdown/podman-compose.1.html),
 [Podman machine](https://docs.podman.io/en/stable/markdown/podman-machine.1.html),
