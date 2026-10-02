@@ -62,6 +62,9 @@ def parser() -> argparse.ArgumentParser:
     init = actions.add_parser("init", help="create private configuration and storage directories")
     init.add_argument("--data-root", type=Path, help="storage parent; defaults to DATA_ROOT or ~/Data")
     init.add_argument("--backend", choices=("docker", "podman"))
+    init.add_argument("--podman-forwarding", choices=("native", "ssh"),
+                      help="opt-in managed localhost SSH tunnel for Podman machines")
+    init.add_argument("--podman-machine", help="Podman machine name; defaults to podman-machine-default")
     init.add_argument("--postgres-storage", choices=("bind", "volume"),
                       help="PostgreSQL storage; Windows defaults to a Linux-backed named volume")
     init.add_argument("--project-name")
@@ -126,7 +129,8 @@ def main(argv: list[str] | None = None) -> int:
                 }.items() if value is not None}
                 result = initialize(args.project_root, data_root=args.data_root,
                                     backend=args.backend, project_name=args.project_name, ports=ports,
-                                    postgres_storage=args.postgres_storage)
+                                    postgres_storage=args.postgres_storage,
+                                    podman_forwarding=args.podman_forwarding, podman_machine=args.podman_machine)
             else:
                 platform = Platform(args.project_root)
                 if args.platform_action == "up":

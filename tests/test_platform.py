@@ -11,7 +11,7 @@ import pytest
 from lake_cli.cli import main
 from lake_cli.config import Settings, _read_env
 from lake_cli.errors import LakeError
-from lake_cli.platform import PORTS, Platform, initialize
+from lake_cli.platform import PORTS, Platform, initialize, _forwarding_runtime_root
 
 
 @pytest.fixture
@@ -26,6 +26,8 @@ def project(tmp_path, monkeypatch):
                 "POLARIS_ROOT_CLIENT_SECRET", "POSTGRES_PASSWORD", "RUSTFS_SECRET_KEY"):
         monkeypatch.delenv(key, raising=False)
     for key in ("POSTGRES_STORAGE", "POSTGRES_STORAGE_TYPE", "POSTGRES_STORAGE_SOURCE"):
+        monkeypatch.delenv(key, raising=False)
+    for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE"):
         monkeypatch.delenv(key, raising=False)
     return root
 
@@ -381,3 +383,63 @@ def test_container_output_utf8_and_invalid_bytes_remain_readable(project, monkey
     assert "\ufffd" in output
     assert "[redacted]" in output
     assert platform.values["POSTGRES_PASSWORD"] not in output
+
+
+def test_managed_forwarding_lifecycle_and_journal(project, monkeypatch):
+    initialize(project, data_root=Path("data"), backend="podman", podman_forwarding="ssh")
+    platform = Platform(project)
+    calls = fake_runtime(platform, monkeypatch)
+    events = []
+    monkeypatch.setattr(platform.forwarder, "ensure", lambda: events.append("ensure") or {"status": "running"})
+    monkeypatch.setattr(platform.forwarder, "stop", lambda: events.append("stop") or {"status": "stopped"})
+    monkeypatch.setattr(platform, "_wait_health", lambda _: events.append("health"))
+    assert platform.up()["forwarding_mode"] == "ssh"
+    assert events == ["ensure", "health"]
+    journals = [json.loads(p.read_text()) for p in platform.state_dir.glob("*.json") if p != platform.state_file]
+    assert journals[0]["forwarding"]["status"] == "running"
+    platform.down()
+    assert events[-1] == "stop"
+    assert ["down"] in calls
+
+
+def test_forwarding_failure_records_run_and_preserves_bootstrap(project, monkeypatch):
+    initialize(project, data_root=Path("data"), backend="podman", podman_forwarding="ssh")
+    platform = Platform(project)
+    fake_runtime(platform, monkeypatch)
+
+    def failure():
+        raise LakeError("SSH forwarding failed")
+
+    monkeypatch.setattr(platform.forwarder, "ensure", failure)
+    with pytest.raises(LakeError, match="SSH forwarding failed"):
+        platform.up()
+    assert json.loads(platform.state_file.read_text())["steps"] == ["realm", "catalog"]
+    journals = [json.loads(p.read_text()) for p in platform.state_dir.glob("*.json") if p != platform.state_file]
+    assert journals[0]["status"] == "failed"
+    assert not (platform.state_dir / "operation.lock").exists()
+
+
+def test_forwarding_config_and_doctor_are_non_mutating(project, monkeypatch):
+    with pytest.raises(LakeError, match="podman backend"):
+        initialize(project, backend="docker", podman_forwarding="ssh")
+    assert not (project / ".env").exists()
+    initialize(project, data_root=Path("data"), backend="podman", podman_forwarding="ssh", podman_machine="work-vm")
+    with pytest.raises(LakeError, match="forwarding mode differs"):
+        initialize(project, podman_forwarding="native")
+    platform = Platform(project)
+    fake_runtime(platform, monkeypatch)
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda _: "podman")
+    monkeypatch.setattr(platform.forwarder, "_command", lambda: ["ssh"])
+    assert platform.doctor()["checks"]["forwarding_prerequisites"]
+    assert not platform.forwarder.directory.exists()
+
+
+def test_windows_forwarding_runtime_is_local_not_external(tmp_path, monkeypatch):
+    cache = tmp_path / "local cache"
+    monkeypatch.setattr("lake_cli.platform._windows_host", lambda: True)
+    monkeypatch.setenv("LOCALAPPDATA", str(cache))
+    lake = tmp_path / "external lake/.data-platform"
+    runtime = _forwarding_runtime_root(lake)
+    assert runtime.is_relative_to(cache)
+    assert not runtime.is_relative_to(lake)
+    assert runtime != _forwarding_runtime_root(tmp_path / "other lake/.data-platform")

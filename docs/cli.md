@@ -135,6 +135,15 @@ Container output is decoded as UTF-8, replacing malformed bytes, independent
 of the host's default encoding. This keeps Windows log diagnostics readable;
 configured secrets remain redacted from successful and failed command output.
 
+For user-scoped Podman/Windows installations with broken native port forwarding,
+`init --podman-forwarding ssh --podman-machine podman-machine-default` enables
+managed localhost SSH forwarding. Existing instances can set `PODMAN_FORWARDING`
+and `PODMAN_MACHINE` in `.env` after shutdown. `up` starts/reuses the background
+helper; `down` stops its owned SSH child; `status` reports forwarding status/log
+location. `doctor` checks executable and matching machine prerequisites without
+starting a tunnel. Native forwarding remains the default. See platform setup
+for first-use host-key trust, port collisions and stale-state recovery.
+
 Use `--project-root` before `platform` to select a checkout from outside it.
 Storage and deployment configuration are independent of the Python interpreter.
 See [platform setup](platform.md) for Windows commands, port selection,

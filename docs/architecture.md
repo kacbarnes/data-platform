@@ -35,6 +35,14 @@ runtime-managed Linux-backed named volume on native Windows. The latter places
 catalog authority outside `DATA_ROOT`: complete backup/transfer requires a
 database dump alongside warehouse objects, configuration and operational records.
 
+Optional managed Podman forwarding is a client-side transport, not a new data
+authority. The platform module starts a detached supervisor which exclusively
+owns its SSH child and accepts tokenized shutdown requests. All listeners bind
+to host loopback. Existing Podman SSH keys are referenced, never copied; no
+lakehouse credentials are passed to this helper. Transient heartbeats/process
+records live in a user-local cache, while startup/shutdown outcomes remain in
+the durable lifecycle journal. Native runtime networking remains the default.
+
 ## Data lifecycle
 
 ```text

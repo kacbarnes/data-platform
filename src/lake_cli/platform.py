@@ -17,6 +17,7 @@ import uuid
 
 from .config import _read_env, discover_project_root, resolve_config_path
 from .errors import LakeError
+from .forwarding import Forwarding
 
 
 PORTS = {"POLARIS_PORT": 8181, "POLARIS_HEALTH_PORT": 8182,
@@ -56,6 +57,16 @@ def _windows_host() -> bool:
     return os.name == "nt"
 
 
+def _forwarding_runtime_root(state_dir: Path) -> Path:
+    # Ephemeral heartbeats belong on the local system disk, not the external lake.
+    cache = (Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
+             if _windows_host() else Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))))
+    if not cache.is_absolute():
+        raise LakeError("local cache directory must be absolute")
+    identity = hashlib.sha256(str(state_dir).encode()).hexdigest()[:20]
+    return cache / "data-platform" / identity
+
+
 def initialize(
     project_root: Path | None,
     *, data_root: Path | None = None,
@@ -63,6 +74,8 @@ def initialize(
     project_name: str | None = None,
     ports: dict[str, int] | None = None,
     postgres_storage: str | None = None,
+    podman_forwarding: str | None = None,
+    podman_machine: str | None = None,
 ) -> dict:
     root = discover_project_root(project_root)
     if not (root / "compose.yaml").is_file():
@@ -80,11 +93,18 @@ def initialize(
             raise LakeError("existing port configuration differs")
         if postgres_storage is not None and postgres_storage != platform.postgres_storage:
             raise LakeError("existing PostgreSQL storage differs; initialization does not migrate databases")
+        if podman_forwarding is not None and podman_forwarding != platform.forwarding_mode:
+            raise LakeError("existing forwarding mode differs; stop services before editing PODMAN_FORWARDING")
+        if podman_machine is not None and podman_machine != platform.machine:
+            raise LakeError("existing Podman machine differs; initialization does not migrate storage")
         return {"created": False, "project_root": str(root), "data_root": str(platform.data_root),
                 "backend": platform.backend, "message": "Existing configuration preserved; no bootstrap performed"}
     selected_backend = backend or os.environ.get("PLATFORM_BACKEND", "docker")
     if selected_backend not in ("docker", "podman"):
         raise LakeError("backend must be docker or podman")
+    forwarding_mode = podman_forwarding or os.environ.get("PODMAN_FORWARDING", "native")
+    machine = podman_machine or os.environ.get("PODMAN_MACHINE", "podman-machine-default")
+    _validate_forwarding(selected_backend, forwarding_mode, machine)
     storage = resolve_config_path(str(data_root or os.environ.get("DATA_ROOT") or Path.home() / "Data"), base=root)
     try:
         selected_ports = {**{k: int(os.environ.get(k, v)) for k, v in PORTS.items()},
@@ -107,6 +127,7 @@ def initialize(
     _prepare_directories(storage)
     values = {
         "DATA_ROOT": storage.as_posix(), "PLATFORM_BACKEND": selected_backend,
+        "PODMAN_FORWARDING": forwarding_mode, "PODMAN_MACHINE": machine,
         "POSTGRES_STORAGE": selected_storage,
         "POSTGRES_STORAGE_TYPE": selected_storage,
         "POSTGRES_STORAGE_SOURCE": "postgres-data" if selected_storage == "volume" else
@@ -141,6 +162,13 @@ def _validate_name(name: str) -> None:
         raise LakeError("Compose project name must use lowercase letters, digits, hyphens or underscores")
 
 
+def _validate_forwarding(backend: str, mode: str, machine: str) -> None:
+    if mode not in ("native", "ssh") or (mode == "ssh" and backend != "podman"):
+        raise LakeError("PODMAN_FORWARDING must be native, or ssh with the podman backend")
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", machine):
+        raise LakeError("invalid PODMAN_MACHINE name")
+
+
 def _validate_ports(ports: dict) -> None:
     try:
         numbers = [int(v) for v in ports.values()]
@@ -167,6 +195,9 @@ class Platform:
                     "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT", "POSTGRES_STORAGE"):
             if key in os.environ:
                 self.values[key] = os.environ[key]
+        for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE"):
+            if key in os.environ:
+                self.values[key] = os.environ[key]
         for key in REQUIRED:
             if not self.values.get(key) or self.values[key] == "replace-me":
                 raise LakeError(f"missing or placeholder configuration: {key}")
@@ -178,6 +209,9 @@ class Platform:
         self.backend = self.values.get("PLATFORM_BACKEND", "docker")
         if self.backend not in ("docker", "podman"):
             raise LakeError("PLATFORM_BACKEND must be docker or podman")
+        self.forwarding_mode = self.values.get("PODMAN_FORWARDING", "native")
+        self.machine = self.values.get("PODMAN_MACHINE", "podman-machine-default")
+        _validate_forwarding(self.backend, self.forwarding_mode, self.machine)
         self.project_name = self.values.get("COMPOSE_PROJECT_NAME", "research-data-platform")
         _validate_name(self.project_name)
         # Legacy installations retain their original mount until explicitly changed.
@@ -198,6 +232,8 @@ class Platform:
         self.values.setdefault("RUSTFS_CLIENT_ENDPOINT", f"localhost:{self.values['RUSTFS_PORT']}")
         self.state_dir = self.data_root / ".data-platform"
         self.state_file = self.state_dir / "bootstrap.json"
+        self.forwarder = Forwarding(_forwarding_runtime_root(self.state_dir), self.machine,
+                                    [int(self.values[k]) for k in PORTS])
         self.environment = {**os.environ, **self.values}
         # An unrelated shell Compose setting must not select a different stack.
         for key in ("COMPOSE_FILE", "COMPOSE_PROFILES", "COMPOSE_ENV_FILES"):
@@ -279,6 +315,7 @@ class Platform:
         run = {"run_id": str(uuid.uuid4()), "action": action, "started_at": _now(),
                "status": "running", "project_name": self.project_name, "steps": []}
         run["postgres_storage"] = self.postgres_storage
+        run["forwarding_mode"] = self.forwarding_mode
         run["compose_sha256"] = hashlib.sha256((self.root / "compose.yaml").read_bytes()).hexdigest()
         bootstrap_script = self.root / "scripts/bootstrap_catalog.py"
         if bootstrap_script.is_file():
@@ -350,10 +387,12 @@ class Platform:
                         state["steps"].append(step)
                         _atomic_json(self.state_file, state)
                         run["steps"][-1]["status"] = "succeeded"
+            if self.forwarding_mode == "ssh":
+                run["forwarding"] = self.forwarder.ensure()
             self._wait_health(timeout)
             return {"status": "running", "backend": self.backend, "data_root": str(self.data_root),
                     "project_name": self.project_name, "polaris_url": f"http://localhost:{self.values['POLARIS_PORT']}",
-                    "run_id": run["run_id"]}
+                    "run_id": run["run_id"], "forwarding_mode": self.forwarding_mode}
 
     def _wait_health(self, timeout: int) -> None:
         import time
@@ -378,11 +417,13 @@ class Platform:
         with self._operation("down") as run:
             self._state()
             self._run(["down"])
+            run["forwarding"] = self.forwarder.stop()
             return {"status": "stopped", "run_id": run["run_id"], "data_preserved": True}
 
     def status(self) -> dict:
         return {"backend": self.backend, "project_name": self.project_name,
-                "data_root": str(self.data_root), "services": self._run(["ps"], timeout=30)}
+                "data_root": str(self.data_root), "services": self._run(["ps"], timeout=30),
+                "forwarding_mode": self.forwarding_mode, "forwarding": self.forwarder.status()}
 
     def logs(self, tail: int = 100) -> dict:
         return {"logs": self._run(["logs", "--no-color", "--tail", str(tail)], timeout=30)}
@@ -396,6 +437,13 @@ class Platform:
         errors = []
         if not checks["postgres_storage_compatible"]:
             errors.append("Windows PostgreSQL needs Linux-backed volume storage; host writability is insufficient")
+        if self.forwarding_mode == "ssh":
+            try:
+                self.forwarder._command()
+                checks["forwarding_prerequisites"] = True
+            except LakeError as exc:
+                checks["forwarding_prerequisites"] = False
+                errors.append(str(exc))
         occupied = []
         for key in PORTS:
             with socket.socket() as probe:
@@ -417,5 +465,6 @@ class Platform:
         return {"ok": all(checks.values()), "checks": checks, "errors": errors,
                 "backend": self.backend, "data_root": str(self.data_root),
                 "postgres_storage": self.postgres_storage,
+                "forwarding_mode": self.forwarding_mode, "forwarding": self.forwarder.status(),
                 "occupied_ports": occupied,
                 "free_bytes": shutil.disk_usage(self.data_root).free if self.data_root.is_dir() else None}

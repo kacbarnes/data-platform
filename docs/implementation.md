@@ -171,6 +171,15 @@ Regression tests exercise real stdout/stderr decoding for successful and failed
 commands, including undefined CP1252 bytes and credential redaction. This fixes
 the diagnostic crash; a health timeout still requires actual service logs.
 
+Managed Podman transport: opt-in `PODMAN_FORWARDING=ssh` and `PODMAN_MACHINE`
+configuration integrates the manually verified Windows tunnel into `up`/`down`.
+A detached user-owned supervisor reuses its tunnel across repeated startup,
+records local-cache heartbeats, and terminates only its owned child on a
+tokenized stop request. Machine/active-connection matching, strict host-key
+checking, occupied-port rejection and stale-state guards fail safely. No admin
+installation or credential copying is required. Real background lifecycle tests
+run on Linux; automated Windows detachment remains for laptop verification.
+
 1. Add a real silver USAspending contract after column-level profiling and
    domain review.
 2. Add multi-file deliveries with a source-file manifest and watermark policy.

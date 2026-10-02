@@ -66,6 +66,73 @@ part of that validation.
 
 ## Configuration and storage
 
+### Managed Podman SSH forwarding (user-scoped Windows)
+
+If services are reachable within the Podman VM but not from Windows localhost,
+enable the SSH path that was verified manually on the Windows ARM64 laptop.
+No administrator installation, firewall change, port-proxy service, or separate
+terminal is required. OpenSSH `ssh.exe` must already be on PATH and the Podman
+machine must be running. Native forwarding remains the default; Linux/Docker
+behavior is unchanged.
+
+For a fresh checkout/configuration:
+
+```powershell
+python -m lake_cli platform init --data-root "E:/ResearchData" --backend podman --podman-forwarding ssh
+python -m lake_cli platform up --timeout 240
+```
+
+For an existing configuration, run `platform down`, close the temporary manual
+SSH tunnel with Ctrl+C, then add these settings to the existing `.env` without
+changing credentials or storage:
+
+```dotenv
+PODMAN_FORWARDING='ssh'
+PODMAN_MACHINE='podman-machine-default'
+```
+
+Thereafter, normal `platform up` starts/reuses a detached, user-owned tunnel and
+waits for host-side health; `platform down` stops containers and asks the tunnel
+supervisor to stop its own SSH child. All four configured host ports are bound
+to `127.0.0.1` and forwarded to the same ports on the VM's loopback interface.
+The Podman machine inspection provides the SSH port, username and identity path.
+The active Podman connection must match that VM. Machine/runtime installation
+and starting the VM are still prerequisites, not automatic platform operations.
+
+The helper references the existing private key; it never copies key contents or
+receives lakehouse credentials. Batch authentication and strict host-key checking
+are enabled. On a new laptop, the first native OpenSSH connection may require a
+one-time verified host-key acceptance; do not disable checking to bypass changed
+keys. Use this only for the local machine you created:
+
+```powershell
+$vm = @(podman machine inspect podman-machine-default | ConvertFrom-Json)[0]
+ssh.exe -i "$($vm.SSHConfig.IdentityPath)" -p $vm.SSHConfig.Port "$($vm.SSHConfig.RemoteUsername)@127.0.0.1" exit
+```
+
+Runtime state and per-launch SSH logs live under
+`%LOCALAPPDATA%/data-platform/<storage-identity>/forwarding` on Windows, or
+`${XDG_CACHE_HOME:-~/.cache}/data-platform/<storage-identity>/forwarding` on Linux.
+They are ephemeral, not transfer/backup artifacts. This keeps heartbeat writes
+off the external data drive. `platform status` shows forwarding state and its
+log path; lifecycle outcomes remain journaled under `DATA_ROOT/.data-platform`.
+Closing the launching terminal does not stop the background tunnel. This is
+not an OS-login service: after reboot or a broken SSH connection, run `up` again.
+
+Occupied ports are rejected rather than adopting a manual tunnel or unrelated
+service. Stop the managed tunnel before changing its machine, ports, storage
+root, or cache location. Stale supervisor state fails safely: no PID read from
+disk is killed, avoiding PID-reuse accidents. A tokenized stop request is handled
+only by the owning supervisor. Force-killing that supervisor can leave an orphan
+SSH process; verify the recorded process and command before manual recovery,
+rather than deleting state or killing every `ssh.exe` process.
+
+Real detached-process reuse, failure, shutdown and restart are tested on Linux
+using isolated local listener children; Windows creation flags and generated SSH
+commands are covered by unit tests. The manually created tunnel was verified on
+Windows/Podman, but the automated Windows background process still needs laptop
+validation. No live desktop lakehouse is touched by those tests.
+
 `DATA_PLATFORM_HOME` selects software/configuration; `DATA_ROOT` selects the
 storage parent. Relative storage paths resolve against the checkout; `~` expands
 to the user's home, and symlinks are resolved. Initialization defaults to the
