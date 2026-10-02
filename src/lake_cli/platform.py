@@ -218,7 +218,8 @@ class Platform:
                    "--file", str(self.root / "compose.yaml"), *arguments]
         try:
             result = subprocess.run(command, env=self.environment, cwd=self.root,
-                                    capture_output=True, text=True, check=False, timeout=timeout)
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                    check=False, timeout=timeout)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise LakeError("container operation could not finish; check runtime and retry") from exc
         if result.returncode:
@@ -262,7 +263,8 @@ class Platform:
         try:
             result = subprocess.run(
                 [executable, "volume", "ls", "--format", "{{.Name}}"],
-                env=self.environment, capture_output=True, text=True, check=False, timeout=30,
+                env=self.environment, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", check=False, timeout=30,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise LakeError("could not inspect PostgreSQL volumes") from exc

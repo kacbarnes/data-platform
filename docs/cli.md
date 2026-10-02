@@ -131,6 +131,9 @@ a separate catalog backup; copying `DATA_ROOT` alone is incomplete.
 does not repeat bootstrap. `down` preserves data. Global `--json` provides a
 JSON result/error envelope. For legacy state without lifecycle checkpoints,
 `up --existing` starts services without bootstrap using the original credentials.
+Container output is decoded as UTF-8, replacing malformed bytes, independent
+of the host's default encoding. This keeps Windows log diagnostics readable;
+configured secrets remain redacted from successful and failed command output.
 
 Use `--project-root` before `platform` to select a checkout from outside it.
 Storage and deployment configuration are independent of the Python interpreter.

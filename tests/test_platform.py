@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 
 import pytest
 
@@ -90,6 +91,8 @@ def test_commands_override_ambient_compose_settings_and_redact(project, monkeypa
         observed.append(command)
         assert command[1] == "compose"
         assert "COMPOSE_FILE" not in kwargs["env"]
+        assert kwargs["encoding"] == "utf-8"
+        assert kwargs["errors"] == "replace"
         assert kwargs["env"]["DATA_ROOT"] == str(project / "data")
         assert platform.values["POSTGRES_PASSWORD"] not in command
         return subprocess.CompletedProcess(command, 1, "", platform.values["POSTGRES_PASSWORD"])
@@ -350,3 +353,31 @@ def test_windows_doctor_rejects_bind_without_touching_storage(project, monkeypat
     with pytest.raises(LakeError, match="POSIX permissions"):
         platform.up()
     assert not any("up" in c for c in calls)
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_container_output_utf8_and_invalid_bytes_remain_readable(project, monkeypatch, exit_code):
+    initialize(project, data_root=Path("data"))
+    platform = Platform(project)
+    actual_run = subprocess.run
+    payload = "service: snowman ☃ ".encode("utf-8") + b"\x8f " + platform.values["POSTGRES_PASSWORD"].encode()
+
+    def container_output(command, **kwargs):
+        # Real pipe decoding, including bytes undefined in Windows CP1252.
+        script = (f"import sys; sys.stdout.buffer.write({payload!r}); "
+                  f"sys.stderr.buffer.write({payload!r}); sys.exit({exit_code})")
+        return actual_run([sys.executable, "-c", script], **kwargs)
+
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda _: sys.executable)
+    monkeypatch.setattr("lake_cli.platform.subprocess.run", container_output)
+    if exit_code:
+        with pytest.raises(LakeError) as error:
+            platform.logs()
+        output = str(error.value)
+        assert "Compose failed (1)" in output
+    else:
+        output = platform.logs()["logs"]
+    assert "☃" in output
+    assert "\ufffd" in output
+    assert "[redacted]" in output
+    assert platform.values["POSTGRES_PASSWORD"] not in output

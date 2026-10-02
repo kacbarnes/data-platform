@@ -165,6 +165,12 @@ flags native Windows bind mode; runtime permissions and external warehouse
 mounts still need laptop verification. See platform setup for recovery and
 catalog backup implications.
 
+Windows log decoding correction: runtime subprocess output explicitly uses
+UTF-8 with replacement for malformed bytes, instead of Windows CP1252 defaults.
+Regression tests exercise real stdout/stderr decoding for successful and failed
+commands, including undefined CP1252 bytes and credential redaction. This fixes
+the diagnostic crash; a health timeout still requires actual service logs.
+
 1. Add a real silver USAspending contract after column-level profiling and
    domain review.
 2. Add multi-file deliveries with a source-file manifest and watermark policy.
