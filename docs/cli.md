@@ -99,8 +99,11 @@ equivalent command from the checkout root in the intended Python environment:
 python -m pip install --no-deps --no-build-isolation --editable .
 ```
 
-Dependencies and the Hatchling build backend must already be installed;
-`environment.yml` supplies them. A user-owned environment does not require
+Dependencies, the Hatchling build backend, and its `editables` helper must
+already be installed;
+`environment.yml` supplies them, including matched DuckDB 1.5.5 binding and CLI
+via its pip subsection (the conda CLI pin is unavailable on Windows).
+A user-owned environment does not require
 administrator privileges. Package installation generates the `lake` entry point
 inside that environment. The installer no longer creates or replaces
 `~/.local/bin/lake`; any existing symlink is left untouched. Installation does

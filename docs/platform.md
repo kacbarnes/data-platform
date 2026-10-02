@@ -7,6 +7,14 @@ and `scripts/bootstrap_catalog.py`; these deployment assets are not embedded in
 the Python wheel. Use `--project-root` before `platform`, or set
 `DATA_PLATFORM_HOME`, to select that checkout from any working directory.
 
+Create the environment with `mamba env create -f environment.yml`, then activate
+`data-platform`. The file installs Python and general dependencies from
+conda-forge, and both DuckDB 1.5.5 components from official PyPI wheels through
+its pip subsection. The pinned conda-forge CLI release has no Windows build;
+the PyPI CLI has Windows x64 and ARM64 wheels. Do not replace the pin with an
+older CLI just to satisfy the conda solver. On Windows 11 ARM, x64 Miniforge is
+a practical option for an environment matching the x86_64 work laptop.
+
 ## Fresh Linux/Docker instance
 
 From the checkout, with your Python environment active and Docker available:

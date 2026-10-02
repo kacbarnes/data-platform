@@ -130,6 +130,16 @@ increment. See [platform setup](platform.md) for deployment steps and caveats.
 
 ## Deliberate first-version limits
 
+Installation correction: the pinned conda-forge DuckDB CLI 1.5.5 release has no
+Windows artifact. `environment.yml` now installs the Python binding and CLI
+through official PyPI wheels, both pinned to 1.5.5. Package dependencies also
+include the CLI so a normal pip installation provides the query executable.
+The editable-build helper `editables` is explicitly declared in both the build
+requirements and conda environment. Verification: Windows x64 conda resolution
+passes; pip resolves both 1.5.5 wheels for Windows x64 and ARM64; a fresh Linux
+virtual environment installs successfully, passes `pip check`, reports CLI
+1.5.5, and passes all 56 tests. Native Windows execution still needs host testing.
+
 - File ingestion initially accepts one local Parquet, CSV, or JSON artifact per
   run. Multi-file discovery and remote acquisition are later increments.
 - SQL is the first transformation language. Python asset execution can be added

@@ -4,9 +4,13 @@ channels:
 dependencies:
   - python=3.13
   - pip
-  - duckdb-cli=1.5.5
-  - python-duckdb=1.5.5
   - hatchling
+  - editables
   - pyyaml
   - pytest
   - pytz
+  # conda-forge does not publish duckdb-cli 1.5.5 for Windows.
+  # Official PyPI wheels provide matched CLI/binding versions across hosts.
+  - pip:
+      - duckdb==1.5.5
+      - duckdb-cli==1.5.5
