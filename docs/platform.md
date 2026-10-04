@@ -148,6 +148,13 @@ Databases/duckdb/              # operational control database
 .data-platform/               # lifecycle journal and checkpoints
 ```
 
+The generated `DataLake` contains only landing and warehouse directories.
+Bronze/silver/gold are logical catalog namespaces created by bootstrap, not
+parallel disk folders. The warehouse's internal object layout is managed, not
+a directory structure for users to reorganize. Existing legacy folders and
+files remain untouched; initialization does not migrate or register them.
+See [storage boundaries](architecture.md#physical-storage-and-logical-namespaces).
+
 PostgreSQL storage is selected with `init --postgres-storage bind|volume` or
 `POSTGRES_STORAGE`. Fresh native Windows installations default to `volume`;
 Linux defaults to `bind`. Existing `.env` files without this setting retain

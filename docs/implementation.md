@@ -155,6 +155,14 @@ virtual environment installs successfully, passes `pip check`, reports CLI
 
 ## Next safe increments
 
+Storage layout clarification: platform initialization already creates only
+`DataLake/landing` and `DataLake/warehouse`; bronze/silver/gold are bootstrapped
+catalog namespaces. Documentation now consistently distinguishes immutable
+deliveries, registered tables, object-store-owned layout and separate operational
+state. Regression tests enforce the minimal generated layout and preservation
+of pre-existing legacy directories/files. Existing source contracts and live
+warehouse objects are unchanged; consolidation is a separate reviewed migration.
+
 Windows PostgreSQL correction: native Windows initialization now selects a
 Linux-backed named volume instead of a Windows bind mount. Linux and legacy
 configurations retain bind mode. Storage mode is checkpointed and journaled;

@@ -52,6 +52,31 @@ def test_init_private_repeatable_and_relative(project, capsys):
         initialize(project, data_root=Path("different"))
 
 
+def test_init_creates_minimal_physical_lake_not_catalog_tiers(project):
+    initialize(project, data_root=Path("data"))
+    lake = project / "data/DataLake"
+    assert {entry.name for entry in lake.iterdir()} == {"landing", "warehouse"}
+    assert (lake / "landing").is_dir()
+    assert (lake / "warehouse").is_dir()
+    assert not any((lake / stage).exists() for stage in ("bronze", "silver", "gold"))
+
+
+def test_init_preserves_legacy_tier_files_without_relocating(project):
+    storage = project / "data"
+    artifacts = []
+    for stage in ("bronze", "silver", "gold"):
+        directory = storage / "DataLake" / stage
+        directory.mkdir(parents=True)
+        artifact = directory / "existing-file.txt"
+        artifact.write_bytes(b"existing user data\n")
+        artifacts.append(artifact)
+    initialize(project, data_root=storage)
+    initialize(project, data_root=storage)
+    assert all(p.read_bytes() == b"existing user data\n" for p in artifacts)
+    assert not any((storage / "DataLake/warehouse").iterdir())
+    assert not any((storage / "DataLake/landing").iterdir())
+
+
 def test_init_refuses_existing_storage_and_invalid_ports(project):
     storage = project / "old"
     metastore = storage / "Databases/postgres/polaris"

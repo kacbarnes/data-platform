@@ -1,7 +1,9 @@
 # Research data platform
 
 A local, persistent Iceberg lakehouse used to learn and apply enterprise data
-management practices without hiding durable data inside Docker's virtual disk.
+management practices. Table objects stay under your configured data root;
+Windows catalog storage uses a Linux-backed runtime volume with separate backup
+requirements.
 
 See [`ROADMAP.md`](ROADMAP.md) for the portability and packaging milestones and
 [`docs/roadmap/`](docs/roadmap/) for their implementation plans.
@@ -15,8 +17,25 @@ See [`ROADMAP.md`](ROADMAP.md) for the portability and packaging milestones and
 - **DuckDB**: ingestion, validation, querying, and the operational control DB at
   `${DATA_ROOT}/Databases/duckdb/control.duckdb`.
 
-Only source files belong in `landing`, `raw`, or `Archive`. Never manually edit
-anything in `warehouse`; Iceberg and its catalog own that tree.
+The physical data-lake layout is intentionally small:
+
+```text
+${DATA_ROOT}/DataLake/
+  landing/       # Immutable source deliveries and provenance records
+  warehouse/     # RustFS/Iceberg-managed objects and table metadata
+```
+
+Bronze, silver, and gold are **catalog namespaces**, not additional directories
+to create or populate. Landing preserves the delivery as received; bronze is
+its first catalog-managed table representation. Silver and gold are refined
+tables and products, addressed through the catalog in the same object store.
+Iceberg manages table/snapshot metadata, not just labels on individual files.
+
+Never manually edit anything in `warehouse`; the object store, Iceberg, and
+catalog own that tree. Existing `raw`, `Archive`, or physical tier directories
+are legacy/source locations: initialization leaves them untouched and existing
+contracts can still read them. They are not part of the layout generated for
+new installations. See [storage boundaries](docs/architecture.md#physical-storage-and-logical-namespaces).
 
 ## First-time setup
 

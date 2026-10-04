@@ -4,7 +4,7 @@
 
 | Concern | Authority | Location |
 | --- | --- | --- |
-| Source artifacts | User/research source | `${DATA_ROOT}/DataLake/landing`, `raw`, or `Archive` |
+| Source deliveries and provenance | User/research source | `${DATA_ROOT}/DataLake/landing` |
 | Table metadata and snapshots | Iceberg through Polaris | `${DATA_ROOT}/DataLake/warehouse` |
 | Catalog authorization and table pointers | Polaris | PostgreSQL metastore |
 | Durable table objects | RustFS | Iceberg warehouse bind mount |
@@ -58,6 +58,35 @@ source artifact
 
 Bronze, silver, and gold are logical Iceberg namespaces. They are not folders
 into which users copy files.
+
+## Physical storage and logical namespaces
+
+New instances create only `landing/` and `warehouse/` within `DataLake/`.
+`Databases/` and `.data-platform/` hold separate control/metastore and operational
+state; they are not processing stages. Windows PostgreSQL volume storage remains
+outside this physical tree, as described above.
+
+Landing is an immutable, file-oriented intake area. Keep original ZIP/TAR
+deliveries, workbooks and CSVs there, with project/delivery/version organization
+when useful. Landing files are not automatically registered as Iceberg tables.
+Ingestion is an explicit, tracked operation defined by a dataset contract.
+
+`research.bronze`, `research.silver`, and `research.gold` are catalog namespaces
+that organize registered tables by processing stage. A contract's target
+namespace, not its source directory name, chooses that logical location.
+Landing and bronze may retain overlapping content because preserving the exact
+delivery and providing a queryable table are different responsibilities.
+
+The shared warehouse still contains an internal object/directory layout chosen
+by RustFS and Iceberg. Namespace-like prefixes may legitimately appear there;
+the rule is not to flatten those objects, but to avoid a second user-maintained
+tier layout. Do not move table objects to change their classification.
+
+Legacy `raw`, `Archive`, or physical `bronze/silver/gold` directories are neither
+deleted nor relocated by initialization. Existing contract source paths continue
+to work. Their contents are not automatically adopted, reclassified, or copied
+into the catalog. Review any consolidation separately, preserving immutable
+sources and using catalog-aware migration for registered tables.
 
 ## Metadata layers
 

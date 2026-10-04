@@ -160,7 +160,7 @@ owner: research-group
 description: Award records received from an external agency.
 source:
   format: parquet
-  path: /data/raw/agency/awards.parquet
+  path: /data/DataLake/landing/agency/awards.parquet
 target:
   catalog: research
   namespace: bronze
@@ -231,6 +231,12 @@ All contracts are parsed and validated before output. Duplicate IDs, invalid
 identifiers, missing transform SQL, and invalid update policies fail here.
 
 ### Ingest bronze
+
+The source path identifies an intake file; `target.namespace: bronze` identifies
+its catalog destination, not a disk directory. New deliveries belong under
+`DATA_ROOT/DataLake/landing`. Existing contracts referencing legacy source paths
+remain supported and are not rewritten by initialization. Ingestion does not
+require or create a user-managed `DataLake/bronze` directory.
 
 ```bash
 lake ingest usaspending.assistance
