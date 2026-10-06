@@ -39,8 +39,9 @@ new installations. See [storage boundaries](docs/architecture.md#physical-storag
 
 ## First-time setup
 
-Install the Python environment and package first. Docker or Podman, with a
-working Compose provider, must already be available to your user.
+Install the Python environment and package first. Docker or Podman must already
+be available to your user. The environment bundles `podman-compose` for the
+Docker-free Podman path; Docker deployments still require Docker Compose.
 
 ```bash
 mamba env create -f environment.yml
@@ -65,7 +66,9 @@ lake platform down
 See [platform setup](docs/platform.md) for native Windows/Podman commands,
 external-drive configuration, alternate ports, legacy-instance startup, retry
 records, and validation limitations. Linux/Docker was tested with a fresh
-isolated stack; Windows/Podman still requires host validation.
+isolated stack. Windows/Podman services and catalog queries were verified with
+a manual SSH tunnel; automated forwarding, the bundled provider and the work
+external-drive deployment still need host validation.
 
 Default endpoints are bound to localhost:
 
@@ -127,8 +130,10 @@ lake status --limit 20
 `bronze` namespace by default. Set `DATA_PLATFORM_DUCKDB` to select a DuckDB
 executable, otherwise it uses `duckdb` from `PATH`. Its temporary credential
 file is mode `0600` on POSIX and removed after exit or interruption; Windows uses
-temporary-directory ACLs. Linux execution is tested; native Windows validation
-is pending. Forced termination can leave the startup file behind.
+temporary-directory ACLs. Catalog attachment and empty-table listing were
+verified on native Windows with the manual SSH tunnel; table-object operations
+and automated forwarding still need host validation. Forced termination can
+leave the startup file behind.
 
 ```bash
 lake query

@@ -155,6 +155,20 @@ virtual environment installs successfully, passes `pip check`, reports CLI
 
 ## Next safe increments
 
+Docker-free Podman installation: `environment.yml` includes the universal Python
+podman-compose 1.6.0 wheel; pip installation exposes a matching `podman` extra.
+Fresh Podman configurations explicitly select that provider. Legacy provider
+precedence is preserved to avoid silently switching running database containers;
+changes require shutdown with the original provider. Lifecycle invocations use
+cwd plus absolute files instead of Docker's unsupported `--project-directory`.
+The isolated provider installation and Compose parsing passed with a stand-in
+version probe, without a live Podman engine. Full runtime/provider compatibility
+remains a Windows test gate.
+All 84 regression tests pass. The isolated provider environment passes pip check,
+and provider/dependency wheel resolution succeeds for Windows x64 and ARM64.
+Windows catalog connectivity was verified with the manual tunnel; managed
+forwarding, Docker-free startup and external-drive table I/O remain unverified.
+
 Storage layout clarification: platform initialization already creates only
 `DataLake/landing` and `DataLake/warehouse`; bronze/silver/gold are bootstrapped
 catalog namespaces. Documentation now consistently distinguishes immutable

@@ -14,3 +14,5 @@ dependencies:
   - pip:
       - duckdb==1.5.5
       - duckdb-cli==1.5.5
+      # Pure-Python Compose provider; no Docker Desktop installation required.
+      - podman-compose==1.6.0

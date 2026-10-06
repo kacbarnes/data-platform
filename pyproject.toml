@@ -9,6 +9,9 @@ description = "Contract-driven local research lakehouse operations"
 requires-python = ">=3.13"
 dependencies = ["duckdb==1.5.5", "duckdb-cli==1.5.5", "PyYAML>=6.0", "pytz>=2025.2"]
 
+[project.optional-dependencies]
+podman = ["podman-compose==1.6.0"]
+
 [project.scripts]
 lake = "lake_cli.cli:main"
 

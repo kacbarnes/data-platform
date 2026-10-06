@@ -35,8 +35,10 @@ several minutes while public images are pulled.
 
 ## Fresh Windows/Podman instance
 
-Use a Python environment with the dependencies in `environment.yml`, plus Podman
-and a Compose provider. Podman on Windows uses a Linux VM; the external drive
+Use `environment.yml`, which bundles `podman-compose==1.6.0`, plus an installed
+Podman runtime. Docker and Docker Desktop are not prerequisites for this path.
+Pip-only installations can use `python -m pip install '.[podman]'`.
+Podman on Windows uses a Linux VM; the external drive
 and checkout must be accessible to that VM and provider. Unlock and attach the
 drive before initialization. A Windows drive path is different from its WSL
 mount path; use the path appropriate to the environment running the CLI.
@@ -46,8 +48,8 @@ From a native PowerShell session in the checkout:
 ```powershell
 python -m pip install --no-deps --no-build-isolation --editable .
 podman machine start
-podman compose version
-python -m lake_cli platform init --data-root "E:/ResearchData" --backend podman
+podman-compose --version
+python -m lake_cli platform init --data-root "E:/ResearchData" --backend podman --podman-forwarding ssh
 python -m lake_cli platform doctor
 python -m lake_cli platform up
 python -m lake_cli platform status
@@ -58,11 +60,27 @@ An existing Podman machine is a prerequisite for the `machine start` example;
 follow your organization's runtime setup if it has not been created. Podman's
 Compose command delegates to an installed provider. The definition requires
 profiles, health dependencies, completed one-shot dependencies, long-form bind
-mounts, and `config --quiet`. Docker Compose is the validated provider here.
-Podman command generation is tested, but a live Podman/Windows deployment still
-needs validation on the laptop. Do not infer Windows mount compatibility from
-Linux tests. External-drive sharing, NTFS behavior, and host/VM permissions are
-part of that validation.
+mounts, and `config --quiet`. Fresh Podman initialization records
+`PODMAN_COMPOSE_PROVIDER='podman-compose'`; the lifecycle runner resolves it in
+the active environment and explicitly passes it to Podman. Override this in
+`.env` or the shell with an executable name/full path when needed. Working
+directory plus absolute Compose/env paths replace `--project-directory`, which
+podman-compose does not support.
+
+**Existing-provider changes:** stop services using the original provider before
+changing this setting. Docker Compose and podman-compose use different container
+names/labels; switching while PostgreSQL is running can start a second container
+against the same database volume. Preserve the project name, credentials, volume
+and checkpoints. Legacy configurations without an explicit provider retain
+Docker-first discovery if available, otherwise use podman-compose. After stopping
+the original stack, set `PODMAN_COMPOSE_PROVIDER='podman-compose'` for the Docker-free path.
+
+The Windows ARM64 laptop successfully started services and queried the empty
+catalog using Docker's provider plus a manual SSH tunnel. Managed forwarding is
+implemented and locally tested, but automated Windows detachment, a full
+podman-compose deployment, actual table-object reads/writes, and the work
+laptop/external-drive configuration still need host qualification. Do not infer
+these results from Linux tests.
 
 ## Configuration and storage
 
@@ -302,6 +320,7 @@ preserved its volume. Test state remains at
 Native Windows/Podman filesystem behavior still needs laptop verification.
 
 Official runtime references: [Podman Compose](https://docs.podman.io/en/stable/markdown/podman-compose.1.html),
+[podman-compose package](https://pypi.org/project/podman-compose/1.6.0/),
 [Podman machine](https://docs.podman.io/en/stable/markdown/podman-machine.1.html),
 [Compose interpolation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/),
 and [Polaris 1.7 bootstrap behavior](https://polaris.incubator.apache.org/downloads/1.7.0/).

@@ -144,6 +144,12 @@ location. `doctor` checks executable and matching machine prerequisites without
 starting a tunnel. Native forwarding remains the default. See platform setup
 for first-use host-key trust, port collisions and stale-state recovery.
 
+`environment.yml` bundles `podman-compose==1.6.0`; pip-only installations can
+use `.[podman]`. Fresh Podman configuration explicitly selects that provider.
+`PODMAN_COMPOSE_PROVIDER` overrides its executable name/path. Stop an existing
+stack with its original provider before switching, since provider-specific
+container names differ. Docker is not required for the Podman deployment.
+
 Use `--project-root` before `platform` to select a checkout from outside it.
 Storage and deployment configuration are independent of the Python interpreter.
 See [platform setup](platform.md) for Windows commands, port selection,

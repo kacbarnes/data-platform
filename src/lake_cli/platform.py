@@ -144,6 +144,8 @@ def initialize(
         "POLARIS_URL": f"http://localhost:{selected_ports['POLARIS_PORT']}",
         "RUSTFS_CLIENT_ENDPOINT": f"localhost:{selected_ports['RUSTFS_PORT']}",
     }
+    if selected_backend == "podman":
+        values["PODMAN_COMPOSE_PROVIDER"] = os.environ.get("PODMAN_COMPOSE_PROVIDER") or "podman-compose"
     # Use the subset of .env quoting accepted by both Compose and our reader.
     if any("\n" in v or "\r" in v or "'" in v or "$" in v for v in values.values()):
         raise LakeError("configuration paths cannot contain apostrophes, dollars, or newlines yet")
@@ -195,7 +197,7 @@ class Platform:
                     "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT", "POSTGRES_STORAGE"):
             if key in os.environ:
                 self.values[key] = os.environ[key]
-        for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE"):
+        for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE", "PODMAN_COMPOSE_PROVIDER"):
             if key in os.environ:
                 self.values[key] = os.environ[key]
         for key in REQUIRED:
@@ -249,11 +251,24 @@ class Platform:
         executable = shutil.which(self.backend)
         if executable is None:
             raise LakeError(f"{self.backend} is not installed or not on PATH")
+        environment = self.environment.copy()
+        if self.backend == "podman":
+            # Fresh configurations explicitly choose the bundled provider.
+            # Legacy installations retain Podman's Docker-first precedence:
+            # switching providers on a running stack can create duplicate
+            # containers against the same PostgreSQL volume.
+            provider = self.values.get("PODMAN_COMPOSE_PROVIDER") or environment.get("PODMAN_COMPOSE_PROVIDER")
+            if not provider:
+                provider = shutil.which("docker-compose") or "podman-compose"
+            resolved = shutil.which(provider)
+            if resolved is None:
+                raise LakeError("Podman Compose provider not found; update environment.yml or install research-lake-cli[podman], or set PODMAN_COMPOSE_PROVIDER explicitly")
+            environment["PODMAN_COMPOSE_PROVIDER"] = resolved
         command = [executable, "compose", "--project-name", self.project_name,
-                   "--project-directory", str(self.root), "--env-file", str(self.root / ".env"),
+                   "--env-file", str(self.root / ".env"),
                    "--file", str(self.root / "compose.yaml"), *arguments]
         try:
-            result = subprocess.run(command, env=self.environment, cwd=self.root,
+            result = subprocess.run(command, env=environment, cwd=self.root,
                                     capture_output=True, text=True, encoding="utf-8", errors="replace",
                                     check=False, timeout=timeout)
         except (OSError, subprocess.TimeoutExpired) as exc:

@@ -27,7 +27,7 @@ def project(tmp_path, monkeypatch):
         monkeypatch.delenv(key, raising=False)
     for key in ("POSTGRES_STORAGE", "POSTGRES_STORAGE_TYPE", "POSTGRES_STORAGE_SOURCE"):
         monkeypatch.delenv(key, raising=False)
-    for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE"):
+    for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE", "PODMAN_COMPOSE_PROVIDER"):
         monkeypatch.delenv(key, raising=False)
     return root
 
@@ -117,6 +117,10 @@ def test_commands_override_ambient_compose_settings_and_redact(project, monkeypa
     def run(command, **kwargs):
         observed.append(command)
         assert command[1] == "compose"
+        assert "--project-directory" not in command
+        assert kwargs["cwd"] == project
+        if backend == "podman":
+            assert kwargs["env"]["PODMAN_COMPOSE_PROVIDER"] == backend
         assert "COMPOSE_FILE" not in kwargs["env"]
         assert kwargs["encoding"] == "utf-8"
         assert kwargs["errors"] == "replace"
@@ -468,3 +472,34 @@ def test_windows_forwarding_runtime_is_local_not_external(tmp_path, monkeypatch)
     assert runtime.is_relative_to(cache)
     assert not runtime.is_relative_to(lake)
     assert runtime != _forwarding_runtime_root(tmp_path / "other lake/.data-platform")
+
+
+def test_podman_provider_override_and_missing_dependency(project, monkeypatch):
+    initialize(project, data_root=Path("data"), backend="podman")
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda name: "podman" if name == "podman" else None)
+    with pytest.raises(LakeError, match="provider not found"):
+        Platform(project).status()
+    monkeypatch.setenv("PODMAN_COMPOSE_PROVIDER", "/user tools/custom-compose")
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda name: name)
+
+    def run(command, **kwargs):
+        assert kwargs["env"]["PODMAN_COMPOSE_PROVIDER"] == "/user tools/custom-compose"
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("lake_cli.platform.subprocess.run", run)
+    Platform(project).status()
+
+
+def test_legacy_podman_provider_precedence_is_preserved(project, monkeypatch):
+    initialize(project, data_root=Path("data"), backend="podman")
+    lines = (project / ".env").read_text().splitlines()
+    (project / ".env").write_text("\n".join(line for line in lines if not line.startswith("PODMAN_COMPOSE_PROVIDER=")))
+    paths = {"podman": "/tools/podman", "docker-compose": "/tools/docker-compose", "podman-compose": "/env/podman-compose"}
+    monkeypatch.setattr("lake_cli.platform.shutil.which", lambda name: paths.get(name, name if name.startswith("/tools/") else None))
+
+    def run(command, **kwargs):
+        assert kwargs["env"]["PODMAN_COMPOSE_PROVIDER"] == "/tools/docker-compose"
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("lake_cli.platform.subprocess.run", run)
+    Platform(project).status()
