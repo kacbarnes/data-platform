@@ -143,6 +143,8 @@ helper; `down` stops its owned SSH child; `status` reports forwarding status/log
 location. `doctor` checks executable and matching machine prerequisites without
 starting a tunnel. Native forwarding remains the default. See platform setup
 for first-use host-key trust, port collisions and stale-state recovery.
+Forwarding logs capture Python-helper startup errors as well as SSH output;
+`status` includes recorded helper errors and SSH exit codes when available.
 
 `environment.yml` bundles `podman-compose==1.6.0`; pip-only installations can
 use `.[podman]`. Fresh Podman configuration explicitly selects that provider.

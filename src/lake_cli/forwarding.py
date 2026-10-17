@@ -36,6 +36,15 @@ def _write(path: Path, value: dict) -> None:
     _atomic_json(path, value)
 
 
+def _diagnostic(path: Path, message: str) -> None:
+    """Record lifecycle diagnostics without dumping commands, state or keys."""
+    try:
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(f"[forwarding] {message}\n")
+    except OSError:
+        pass  # Preserve the original failure if the log itself is inaccessible.
+
+
 def _background_options() -> dict:
     if os.name == "nt":
         return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -127,7 +136,8 @@ class Forwarding:
         return {"status": state.get("status", "unknown") if _fresh(state) or
                 state.get("status") in ("stopped", "failed") else "stale",
                 "machine": state.get("machine"), "ports": state.get("ports"),
-                "log": state.get("log")}
+                "log": state.get("log"), "error": state.get("error"),
+                "ssh_exit_code": state.get("ssh_exit_code")}
 
     def ensure(self) -> dict:
         command = self._command()
@@ -167,13 +177,17 @@ class Forwarding:
             "PATH", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP",
             "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "LANG", "LC_ALL",
         )}
+        _diagnostic(log, "Launching detached Python supervisor")
         try:
-            child = subprocess.Popen(
-                [sys.executable, "-m", "lake_cli.forwarding", "--serve", str(request)],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env=environment, close_fds=True, **_background_options(),
-            )
+            # Capture interpreter/module/DLL startup failures too, not only SSH.
+            with log.open("ab") as output:
+                child = subprocess.Popen(
+                    [sys.executable, "-m", "lake_cli.forwarding", "--serve", str(request)],
+                    stdin=subprocess.DEVNULL, stdout=output, stderr=output,
+                    env=environment, close_fds=True, **_background_options(),
+                )
         except OSError as exc:
+            _diagnostic(log, f"Supervisor launch failed: {type(exc).__name__}: {exc}")
             state.update(status="failed", heartbeat=time.time())
             _write(self.state_path, state)
             raise LakeError("could not launch forwarding supervisor") from exc
@@ -184,7 +198,8 @@ class Forwarding:
                 if state.get("status") == "running":
                     return self.status()
                 if state.get("status") == "failed" or child.poll() is not None:
-                    raise LakeError(f"SSH forwarding failed; inspect {log}. Verify the machine's SSH host key once using native ssh")
+                    _diagnostic(log, f"Startup failed; supervisor exit code: {child.poll()}")
+                    raise LakeError(f"SSH forwarding failed; inspect {log} for supervisor and SSH diagnostics")
                 time.sleep(0.1)
             raise LakeError(f"SSH forwarding startup timed out; inspect {log}")
         except BaseException:
@@ -216,12 +231,14 @@ class Forwarding:
 
 
 def serve(request: Path) -> int:
+    _diagnostic(request.with_suffix(".log"), "Python supervisor entered")
     state = _read(request)
     directory = request.parent
     state_path, stop_path = directory / "state.json", directory / "stop.json"
     child = None
     stopped = False
     try:
+        _diagnostic(Path(state["log"]), "Starting SSH child")
         with Path(state["log"]).open("ab") as log:
             child = subprocess.Popen(state["command"], stdin=subprocess.DEVNULL,
                                      stdout=log, stderr=log, close_fds=True,
@@ -243,9 +260,13 @@ def serve(request: Path) -> int:
                     _write(state_path, state)
                     last_write = time.monotonic()
                 time.sleep(0.2)
-    except Exception:
-        # Details from SSH itself are in the private per-launch log.
-        pass
+            state["ssh_exit_code"] = child.poll()
+            if not stopped:
+                state["error"] = (f"SSH exited with code {child.poll()}" if child.poll() is not None
+                                  else "SSH did not open all forwarding ports before its startup deadline")
+    except Exception as exc:
+        state["error"] = f"Supervisor failure: {type(exc).__name__}: {exc}"
+        _diagnostic(Path(state["log"]), state["error"])
     finally:
         if child is not None and child.poll() is None:
             child.terminate()
@@ -254,6 +275,7 @@ def serve(request: Path) -> int:
             except subprocess.TimeoutExpired:
                 child.kill()  # Owned Popen handle, never a PID read from disk.
                 child.wait()
+        _diagnostic(Path(state["log"]), "Stopped" if stopped else state.get("error", "Supervisor failed"))
         state.update(status="stopped" if stopped else "failed", heartbeat=time.time())
         _write(state_path, state)
         request.unlink(missing_ok=True)

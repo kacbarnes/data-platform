@@ -63,8 +63,44 @@ def test_real_child_failure_can_retry(forwarding, monkeypatch):
     with pytest.raises(LakeError, match="SSH forwarding failed"):
         forwarding.ensure()
     assert forwarding.status()["status"] == "failed"
+    assert forwarding.status()["ssh_exit_code"] == 1
+    log = Path(forwarding.status()["log"]).read_text()
+    assert "Python supervisor entered" in log
+    assert "SSH exited with code 1" in log
     monkeypatch.setattr(forwarding, "_command", original)
     assert forwarding.ensure()["status"] == "running"
+
+
+def test_child_launch_exception_is_not_silently_discarded(forwarding, monkeypatch):
+    missing = str(forwarding.directory.parent / "missing-ssh-executable")
+    monkeypatch.setattr(forwarding, "_command", lambda: [missing])
+    with pytest.raises(LakeError, match="supervisor and SSH diagnostics"):
+        forwarding.ensure()
+    status = forwarding.status()
+    assert status["status"] == "failed"
+    assert "FileNotFoundError" in status["error"]
+    assert "Starting SSH child" in Path(status["log"]).read_text()
+    assert "FileNotFoundError" in Path(status["log"]).read_text()
+
+
+def test_interpreter_startup_stderr_is_captured(forwarding, monkeypatch):
+    actual_popen = subprocess.Popen
+
+    def fail_interpreter(command, **kwargs):
+        return actual_popen([sys.executable, "-c",
+                            "import sys; sys.stderr.write('simulated interpreter startup failure'); sys.exit(23)"],
+                           **kwargs)
+
+    monkeypatch.setattr("lake_cli.forwarding.subprocess.Popen", fail_interpreter)
+    with pytest.raises(LakeError, match="forwarding failed"):
+        forwarding.ensure()
+    log = Path(forwarding.status()["log"]).read_text()
+    assert "simulated interpreter startup failure" in log
+    assert "supervisor exit code: 23" in log
+    # No SSH child was launched. Restore this test's manufactured stale record.
+    state = json.loads(forwarding.state_path.read_text())
+    state["status"] = "failed"
+    forwarding.state_path.write_text(json.dumps(state))
 
 
 def test_manual_listener_not_adopted(forwarding):

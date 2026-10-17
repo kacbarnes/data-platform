@@ -134,6 +134,11 @@ Runtime state and per-launch SSH logs live under
 They are ephemeral, not transfer/backup artifacts. This keeps heartbeat writes
 off the external data drive. `platform status` shows forwarding state and its
 log path; lifecycle outcomes remain journaled under `DATA_ROOT/.data-platform`.
+The log captures both Python-supervisor output and SSH output, with startup
+markers, launch exceptions and exit diagnostics. `status` also reports a helper
+error and SSH exit code when available. An SSH startup failure is not necessarily
+a host-key problem. If a pre-fix run left an empty log and stale state, preserve
+the state and review the recorded processes rather than deleting it to retry.
 Closing the launching terminal does not stop the background tunnel. This is
 not an OS-login service: after reboot or a broken SSH connection, run `up` again.
 

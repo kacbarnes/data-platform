@@ -155,6 +155,13 @@ virtual environment installs successfully, passes `pip check`, reports CLI
 
 ## Next safe increments
 
+Managed-forwarding diagnostics: detached Python output is now captured in the
+private per-launch log instead of discarded. Supervisor startup markers, caught
+exceptions and SSH exit codes distinguish helper-launch failures from native SSH
+failures. Real process tests cover interpreter stderr and a missing SSH binary.
+This repairs the empty-log diagnostic gap; the laptop's underlying failure still
+requires its actual output. Stale-state safety guards are unchanged.
+
 Docker-free Podman installation: `environment.yml` includes the universal Python
 podman-compose 1.6.0 wheel; pip installation exposes a matching `podman` extra.
 Fresh Podman configurations explicitly select that provider. Legacy provider
