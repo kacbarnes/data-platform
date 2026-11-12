@@ -8,7 +8,8 @@
 | Table metadata and snapshots | Iceberg through Polaris | `${DATA_ROOT}/DataLake/warehouse` |
 | Catalog authorization and table pointers | Polaris | PostgreSQL metastore |
 | Durable table objects | RustFS | Iceberg warehouse bind mount |
-| Contracts and transformations | Git | This repository |
+| Dataset contracts | User/research project | Private, Git-ignored `contracts/` |
+| Platform and transformation code | Git | This repository |
 | Runs, lineage, and quality results | `lake` CLI | `${DATA_ROOT}/Databases/duckdb/control.duckdb` |
 | Platform bootstrap and lifecycle operations | `lake platform` | `${DATA_ROOT}/.data-platform` journals and checkpoints |
 | Interactive analysis | DuckDB CLI | `lake query` (optional `lakehouse` wrapper) |
@@ -102,7 +103,13 @@ places while retaining the information that software cannot infer responsibly.
 
 ## Project interface
 
-Research projects do not own copies of shared data. They contain contracts,
+Research projects do not own copies of shared data. They maintain private contracts,
 SQL/Python transformations, tests, notebooks, and models. They query shared
 tables through Polaris and publish reusable outputs as new catalog tables. Each
 published output records the exact input snapshots and producing Git commit.
+
+Actual dataset contracts are not distributed in this repository. Their local YAML
+bytes are still hashed for operational provenance. Keep private revisions/backups
+under the data owner's controls; the platform Git commit identifies code rather
+than establishing that a private contract was committed or published. Synthetic
+contract examples remain in documentation and isolated tests.

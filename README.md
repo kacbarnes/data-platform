@@ -95,16 +95,22 @@ credential vending support in prerelease RustFS builds.
 
 ## Contract-driven workflow
 
+Actual dataset contracts stay in the local, Git-ignored `contracts/` directory.
+Fresh clones contain an empty directory placeholder. Create your local YAML
+contracts using the synthetic examples in [the CLI guide](docs/cli.md#dataset-contracts)
+before running the example workflow below. Contract contents, source locations,
+and dataset-specific provenance are not published with this repository.
+
 ```bash
 lake datasets
-lake ingest usaspending.assistance
-lake test usaspending.assistance
-lake status usaspending.assistance
-lake lineage usaspending.assistance
+lake ingest agency.awards
+lake test agency.awards
+lake status agency.awards
+lake lineage agency.awards
 ```
 
 `lake ingest` reads the source location, catalog target, update policy, and
-quality expectations from `contracts/usaspending_assistance.yml`. A source
+quality expectations from `contracts/agency_awards.yml`. A source
 checksum already recorded as successful is skipped automatically. Catalog
 metadata, snapshot history, run status, quality results, and Git provenance are
 updated without hand editing.
@@ -143,17 +149,17 @@ Inside the prompt:
 
 ```sql
 SHOW ALL TABLES;
-SELECT count(*) FROM usaspending_assistance;
-SELECT * FROM usaspending_assistance LIMIT 10;
+SELECT count(*) FROM agency_awards;
+SELECT * FROM agency_awards LIMIT 10;
 SELECT *
-FROM iceberg_snapshots('lakehouse.bronze.usaspending_assistance')
+FROM iceberg_snapshots('lakehouse.bronze.agency_awards')
 ORDER BY timestamp_ms DESC;
 ```
 
 For a single non-interactive query:
 
 ```bash
-lake query -- -c "SELECT count(*) FROM usaspending_assistance;"
+lake query -- -c "SELECT count(*) FROM agency_awards;"
 ```
 
 On Linux/WSL, `scripts/lakehouse` remains an optional Bash wrapper around

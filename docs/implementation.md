@@ -233,3 +233,12 @@ run on Linux; automated Windows detachment remains for laptop verification.
 2. Add multi-file deliveries with a source-file manifest and watermark policy.
 3. Add `lake plan` for dry-run dependency and mutation previews.
 4. Add scheduler integration only after two or more repeatable pipelines exist.
+
+## Private dataset contracts
+
+Actual dataset YAML contracts have been removed from published Git history and
+are no longer tracked. Local contract files remain in place, ignored by Git;
+`contracts/.gitkeep` preserves project discovery for fresh clones. Documentation
+and isolated tests provide synthetic examples. Contract checksums and operational
+tracking are unchanged. Private contract revisions/backups are maintained by the
+data owner rather than published in this platform repository.

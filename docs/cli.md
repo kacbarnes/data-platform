@@ -159,6 +159,13 @@ permissions, retry behavior, diagnostics, and testing evidence.
 
 ## Dataset contracts
 
+Actual source and transform contracts belong in the private, Git-ignored
+`contracts/` directory. A fresh clone contains only `.gitkeep`; `lake datasets`
+will list no datasets until you create local contracts. The examples below use
+fictional datasets and are safe to copy and adapt locally. Keep private contract
+versions and backups outside the published platform history. Run records retain
+the contract checksum and platform code commit without publishing the YAML.
+
 Source contract:
 
 ```yaml
