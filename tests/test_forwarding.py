@@ -35,10 +35,12 @@ def forwarding(tmp_path, monkeypatch):
 def test_real_detached_supervisor_reuse_shutdown_and_restart(forwarding, monkeypatch):
     actual_popen = subprocess.Popen
     monkeypatch.setenv("POSTGRES_PASSWORD", "must-not-reach-supervisor")
+    monkeypatch.setenv("PROGRAMDATA", "C:\\ProgramData")
 
     def launch(command, **kwargs):
         assert "POSTGRES_PASSWORD" not in kwargs["env"]
         assert "POLARIS_ROOT_CLIENT_SECRET" not in kwargs["env"]
+        assert kwargs["env"]["PROGRAMDATA"] == "C:\\ProgramData"
         return actual_popen(command, **kwargs)
 
     monkeypatch.setattr("lake_cli.forwarding.subprocess.Popen", launch)
@@ -188,7 +190,17 @@ def test_corrupt_state_is_not_replaced(forwarding):
 
 
 def test_windows_detachment_flags(monkeypatch):
+    monkeypatch.setattr("lake_cli.forwarding.breakaway_required", lambda: False)
     monkeypatch.setattr("lake_cli.forwarding.os.name", "nt")
     monkeypatch.setattr(subprocess, "DETACHED_PROCESS", 8, raising=False)
     monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
     assert _background_options() == {"creationflags": 520}
+
+
+def test_windows_permitted_breakaway_flag(monkeypatch):
+    monkeypatch.setattr("lake_cli.forwarding.os.name", "nt")
+    monkeypatch.setattr("lake_cli.forwarding.breakaway_required", lambda: True)
+    monkeypatch.setattr(subprocess, "DETACHED_PROCESS", 8, raising=False)
+    monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    monkeypatch.setattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x1000000, raising=False)
+    assert _background_options()["creationflags"] == 520 | 0x1000000

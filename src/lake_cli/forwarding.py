@@ -19,11 +19,13 @@ import uuid
 from urllib.parse import urlsplit
 
 from .errors import LakeError
+from .local_state import atomic_json, read_json
+from .windows_process import breakaway_required
 
 
 def _read(path: Path) -> dict:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = read_json(path)
         if not isinstance(value, dict):
             raise ValueError("not an object")
         return value
@@ -32,8 +34,7 @@ def _read(path: Path) -> dict:
 
 
 def _write(path: Path, value: dict) -> None:
-    from .platform import _atomic_json
-    _atomic_json(path, value)
+    atomic_json(path, value)
 
 
 def _diagnostic(path: Path, message: str) -> None:
@@ -47,7 +48,10 @@ def _diagnostic(path: Path, message: str) -> None:
 
 def _background_options() -> dict:
     if os.name == "nt":
-        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        if breakaway_required():
+            flags |= subprocess.CREATE_BREAKAWAY_FROM_JOB
+        return {"creationflags": flags}
     return {"start_new_session": True}
 
 
@@ -141,6 +145,7 @@ class Forwarding:
 
     def ensure(self) -> dict:
         command = self._command()
+        background_options = _background_options()
         signature = hashlib.sha256(json.dumps(command).encode()).hexdigest()
         if self.state_path.exists():
             previous = _read(self.state_path)
@@ -175,7 +180,7 @@ class Forwarding:
         # Do not pass lakehouse credentials to the long-lived supervisor/SSH.
         environment = {key: value for key, value in os.environ.items() if key in (
             "PATH", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP",
-            "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "LANG", "LC_ALL",
+            "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "LANG", "LC_ALL",
         )}
         _diagnostic(log, "Launching detached Python supervisor")
         try:
@@ -184,7 +189,7 @@ class Forwarding:
                 child = subprocess.Popen(
                     [sys.executable, "-m", "lake_cli.forwarding", "--serve", str(request)],
                     stdin=subprocess.DEVNULL, stdout=output, stderr=output,
-                    env=environment, close_fds=True, **_background_options(),
+                    env=environment, close_fds=True, **background_options,
                 )
         except OSError as exc:
             _diagnostic(log, f"Supervisor launch failed: {type(exc).__name__}: {exc}")

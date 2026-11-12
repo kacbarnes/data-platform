@@ -63,6 +63,24 @@ def test_discovery_explicit_executable_and_missing_override():
         )
 
 
+@pytest.mark.parametrize("host,mode", [("nt", "table"), ("posix", "duckbox")])
+def test_query_table_borders_follow_host(settings, monkeypatch, host, mode):
+    monkeypatch.setattr(query_client.os, "name", host)
+    assert f".mode {mode}\n" in query_client.startup_sql(settings)
+
+
+def test_real_ascii_table_output(settings, monkeypatch, capfd):
+    executable = shutil.which("duckdb")
+    if executable is None:
+        pytest.skip("DuckDB CLI is not installed in PATH")
+    monkeypatch.setattr(query_client, "startup_sql", lambda _: ".mode table\n")
+    assert query_client.run_query(settings, ["--", "-c", "SELECT 42 AS answer"],
+                                 environ={**os.environ, "DATA_PLATFORM_DUCKDB": executable}) == 0
+    output = capfd.readouterr().out
+    assert "42" in output and "+" in output and "|" in output
+    assert output.isascii()
+
+
 def test_discovery_from_path(monkeypatch):
     observed = []
 

@@ -16,6 +16,9 @@ from lake_cli.platform import PORTS, Platform, initialize, _forwarding_runtime_r
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
+    # General lifecycle cases model Linux bind storage; Windows-specific
+    # cases below explicitly select their host/storage behavior.
+    monkeypatch.setattr("lake_cli.platform._windows_host", lambda: False)
     root = tmp_path / "checkout with spaces"
     root.mkdir()
     repository = Path(__file__).resolve().parents[1]
@@ -124,7 +127,7 @@ def test_commands_override_ambient_compose_settings_and_redact(project, monkeypa
         assert "COMPOSE_FILE" not in kwargs["env"]
         assert kwargs["encoding"] == "utf-8"
         assert kwargs["errors"] == "replace"
-        assert kwargs["env"]["DATA_ROOT"] == str(project / "data")
+        assert kwargs["env"]["DATA_ROOT"] == (project / "data").as_posix()
         assert platform.values["POSTGRES_PASSWORD"] not in command
         return subprocess.CompletedProcess(command, 1, "", platform.values["POSTGRES_PASSWORD"])
 

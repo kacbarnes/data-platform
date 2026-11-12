@@ -302,6 +302,10 @@ discovery; otherwise `duckdb` is found on `PATH`. Paths containing spaces are
 passed as individual subprocess arguments. An invalid explicit override fails
 instead of falling back silently. Put DuckDB options after `query --`.
 
+Windows sessions default to ASCII-bordered `table` output to avoid garbled
+Unicode borders. Other hosts retain `duckbox` output. Select another mode in
+the prompt with `.mode`, or pass a DuckDB output option such as `-csv`.
+
 The query client uses the same settings and catalog setup statements as Python
 ingestion, including configured Polaris URL, S3 endpoint and region. It no
 longer checks a fixed localhost health URL or sources `.env` as shell code.

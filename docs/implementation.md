@@ -155,6 +155,25 @@ virtual environment installs successfully, passes `pip check`, reports CLI
 
 ## Next safe increments
 
+Windows client reliability: preserve `PROGRAMDATA` in the forwarding supervisor
+environment; inspect Windows job limits and request permitted breakaway so a
+kill-on-close launcher does not own the persistent tunnel. Restrictive jobs fail
+explicitly. Shared local-state helpers bound retries for Windows sharing/access/
+lock conflicts during JSON reads and atomic replacement, preserving old state
+on replacement failure. Windows query sessions use ASCII-bordered table output.
+Regression coverage includes job policies, native API inspection, environment
+filtering, bounded retries, state preservation/cleanup, and real DuckDB output.
+Native Windows/Podman live qualification passed: healthy PostgreSQL, RustFS and
+Polaris startup; managed OpenSSH connection and reuse; 1,200 concurrent status
+reads during heartbeat updates; shutdown releasing all forwarding ports; and
+restart with a new supervisor. An isolated Windows test explicitly closed a
+kill-on-close job permitting breakaway and verified supervisor survival and
+owned-child shutdown. Read-only DuckDB catalog access, S3 listing and ASCII
+query output passed before/after restart. The catalog and bucket were empty:
+this does not qualify table-object reads/writes or external-drive storage.
+The test platform was restored to its original stopped state. Current native
+Windows regression results: 102 passed, 4 skipped.
+
 Managed-forwarding diagnostics: detached Python output is now captured in the
 private per-launch log instead of discarded. Supervisor startup markers, caught
 exceptions and SSH exit codes distinguish helper-launch failures from native SSH

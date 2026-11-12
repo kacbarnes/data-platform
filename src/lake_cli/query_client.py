@@ -33,7 +33,9 @@ def startup_sql(settings: Settings) -> str:
         f".echo off\n.bail on\n.output {os.devnull}\n"
         + statements
         + f"USE {quote_identifier(settings.catalog_alias)}.bronze;\n"
-        + ".output stdout\n.bail off\n.mode duckbox\n.maxrows 40\n"
+        + ".output stdout\n.bail off\n"
+        + (".mode table\n" if os.name == "nt" else ".mode duckbox\n")
+        + ".maxrows 40\n"
         + ".prompt 'lakehouse> ' '       ...> '\n"
     )
 

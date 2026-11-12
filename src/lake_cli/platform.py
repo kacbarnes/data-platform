@@ -18,6 +18,7 @@ import uuid
 from .config import _read_env, discover_project_root, resolve_config_path
 from .errors import LakeError
 from .forwarding import Forwarding
+from .local_state import atomic_json as _atomic_json, read_json
 
 
 PORTS = {"POLARIS_PORT": 8181, "POLARIS_HEALTH_PORT": 8182,
@@ -33,16 +34,6 @@ def _write_private(path: Path, content: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
         stream.write(content)
-
-
-def _atomic_json(path: Path, value: dict) -> None:
-    fd, filename = tempfile.mkstemp(dir=path.parent, prefix=".state-")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(value, stream, indent=2)
-        os.replace(filename, path)
-    finally:
-        Path(filename).unlink(missing_ok=True)
 
 
 def _now() -> str:
@@ -286,7 +277,7 @@ class Platform:
     def _state(self) -> dict:
         if self.state_file.exists():
             try:
-                state = json.loads(self.state_file.read_text())
+                state = read_json(self.state_file)
                 if not isinstance(state.get("steps"), list):
                     raise ValueError("invalid steps")
             except (ValueError, AttributeError) as exc:

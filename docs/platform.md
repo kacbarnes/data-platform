@@ -142,6 +142,17 @@ the state and review the recorded processes rather than deleting it to retry.
 Closing the launching terminal does not stop the background tunnel. This is
 not an OS-login service: after reboot or a broken SSH connection, run `up` again.
 
+On Windows, the supervisor preserves `PROGRAMDATA` for OpenSSH. It checks the
+launcher's job policy and requests explicit breakaway when permitted; silent
+breakaway follows the job's existing policy. A kill-on-close job that prohibits
+breakaway fails with an actionable error. Use an independent terminal or native
+forwarding in that case. Nested jobs can impose additional restrictions; launch
+failures remain visible in the forwarding log.
+
+Local JSON state reads and atomic replacements retry Windows access/sharing/lock
+conflicts for up to five delays (0.31 seconds total). Persistent failures,
+malformed JSON, missing files, and unrelated errors still fail explicitly.
+
 Occupied ports are rejected rather than adopting a manual tunnel or unrelated
 service. Stop the managed tunnel before changing its machine, ports, storage
 root, or cache location. Stale supervisor state fails safely: no PID read from
