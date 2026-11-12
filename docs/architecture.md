@@ -8,7 +8,7 @@
 | Table metadata and snapshots | Iceberg through Polaris | `${DATA_ROOT}/DataLake/warehouse` |
 | Catalog authorization and table pointers | Polaris | PostgreSQL metastore |
 | Durable table objects | RustFS | Iceberg warehouse bind mount |
-| Dataset contracts | User/research project | Private, Git-ignored `contracts/` |
+| Dataset contracts | User/research project | `CONTRACTS_DIR`, default `${DATA_ROOT}/contracts` |
 | Platform and transformation code | Git | This repository |
 | Runs, lineage, and quality results | `lake` CLI | `${DATA_ROOT}/Databases/duckdb/control.duckdb` |
 | Platform bootstrap and lifecycle operations | `lake platform` | `${DATA_ROOT}/.data-platform` journals and checkpoints |
@@ -108,7 +108,11 @@ SQL/Python transformations, tests, notebooks, and models. They query shared
 tables through Polaris and publish reusable outputs as new catalog tables. Each
 published output records the exact input snapshots and producing Git commit.
 
-Actual dataset contracts are not distributed in this repository. Their local YAML
+Actual dataset contracts live outside the tool checkout and are not distributed
+in this repository. `CONTRACTS_DIR` defaults to `${DATA_ROOT}/contracts`, alongside
+`DataLake`. The CLI and compatibility ingestion wrapper share this setting;
+platform initialization creates the selected directory. There is no implicit
+lookup in the old source-tree `contracts/` directory. Their local YAML
 bytes are still hashed for operational provenance. Keep private revisions/backups
 under the data owner's controls; the platform Git commit identifies code rather
 than establishing that a private contract was committed or published. Synthetic

@@ -36,7 +36,7 @@ def file_sha256(path: Path) -> str:
 class LakeService:
     def __init__(self, settings: Settings, loader: ContractLoader | None = None):
         self.settings = settings
-        self.loader = loader or ContractLoader(settings.project_root / "contracts")
+        self.loader = loader or ContractLoader(settings.contracts_dir)
 
     def _connect(self) -> tuple[duckdb.DuckDBPyConnection, ControlStore]:
         self.settings.control_db.parent.mkdir(parents=True, exist_ok=True)

@@ -77,6 +77,11 @@ class ContractLoader:
     def all(self) -> dict[str, Contract]:
         if self._contracts is not None:
             return self._contracts
+        if not self.root.is_dir():
+            raise ContractError(
+                f"contract directory does not exist or is not a directory: {self.root}; "
+                "create it or set CONTRACTS_DIR to your private contracts directory"
+            )
         contracts: dict[str, Contract] = {}
         for path in sorted(self.root.rglob("*.yml")) + sorted(self.root.rglob("*.yaml")):
             contract = self._load(path)

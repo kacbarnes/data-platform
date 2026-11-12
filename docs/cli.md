@@ -23,9 +23,10 @@ or write operational metadata.
 1. The explicit global `--project-root` option.
 2. A non-empty `DATA_PLATFORM_HOME` environment variable.
 3. The current working directory, then its parents, selecting the first directory
-   containing both `pyproject.toml` and a `contracts/` directory.
+   containing `pyproject.toml` with `[project].name = "research-lake-cli".
+   Dataset contract storage is not a project-discovery marker.
 4. The package's checkout root (two directory levels above the package directory),
-   if it contains `pyproject.toml`.
+   if its `pyproject.toml` identifies the same platform package.
 
 If discovery fails, the CLI asks for `--project-root` or `DATA_PLATFORM_HOME`.
 Explicit and environment-provided roots are expanded and resolved; configuration
@@ -159,12 +160,32 @@ permissions, retry behavior, diagnostics, and testing evidence.
 
 ## Dataset contracts
 
-Actual source and transform contracts belong in the private, Git-ignored
-`contracts/` directory. A fresh clone contains only `.gitkeep`; `lake datasets`
-will list no datasets until you create local contracts. The examples below use
-fictional datasets and are safe to copy and adapt locally. Keep private contract
-versions and backups outside the published platform history. Run records retain
-the contract checksum and platform code commit without publishing the YAML.
+Actual source and transform contracts live outside the tool checkout. The
+`CONTRACTS_DIR` setting defaults to `<resolved DATA_ROOT>/contracts`, alongside
+`DataLake`, and follows environment-over-`.env` precedence. An empty value is an
+error. Explicit relative paths resolve against the selected project root;
+absolute paths, spaces, and `~` are supported. Configuration loading never
+creates directories. `lake platform init --contracts-dir /private/contracts`
+creates the selected directory and records it in private configuration. Existing
+configuration without this setting uses the default.
+
+An existing empty directory lists no datasets. A missing directory fails with
+an actionable error rather than silently searching the checkout. New clones
+contain no contract directory or actual contracts. The examples below use
+fictional datasets and are safe to adapt locally. Run records retain the
+contract checksum and platform code commit without publishing the YAML.
+
+For an existing installation, move local YAML files from the old checkout's
+`contracts/` into the resolved external directory, preserving relative subfolders
+and checking for filename collisions before moving anything. Keep private
+versions and backups under the data owner's controls. Re-running initialization
+creates a missing configured directory but never migrates files or changes
+credentials. An explicitly different directory on repeated initialization is
+rejected; update `CONTRACTS_DIR` deliberately when relocating contracts.
+
+Moving a contract does not change how its `source.path` resolves, and relative
+`transform.sql` paths still resolve against the selected code checkout. The
+managed Iceberg warehouse cannot be selected as contract storage.
 
 Source contract:
 

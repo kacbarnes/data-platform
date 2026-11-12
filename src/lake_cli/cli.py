@@ -9,7 +9,6 @@ import uuid
 
 from . import __version__
 from .config import Settings
-from .contracts import ContractLoader
 from .errors import LakeError
 from .operations import LakeService
 from .platform import Platform, initialize
@@ -61,6 +60,7 @@ def parser() -> argparse.ArgumentParser:
     actions = platform.add_subparsers(dest="platform_action", required=True)
     init = actions.add_parser("init", help="create private configuration and storage directories")
     init.add_argument("--data-root", type=Path, help="storage parent; defaults to DATA_ROOT or ~/Data")
+    init.add_argument("--contracts-dir", type=Path, help="private dataset contracts; defaults to DATA_ROOT/contracts")
     init.add_argument("--backend", choices=("docker", "podman"))
     init.add_argument("--podman-forwarding", choices=("native", "ssh"),
                       help="opt-in managed localhost SSH tunnel for Podman machines")
@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
                     "RUSTFS_CONSOLE_PORT": args.rustfs_console_port,
                 }.items() if value is not None}
                 result = initialize(args.project_root, data_root=args.data_root,
+                                    contracts_dir=args.contracts_dir,
                                     backend=args.backend, project_name=args.project_name, ports=ports,
                                     postgres_storage=args.postgres_storage,
                                     podman_forwarding=args.podman_forwarding, podman_machine=args.podman_machine)
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(result, args.json)
             return 2 if args.platform_action == "doctor" and not result["ok"] else 0
         settings = Settings.load(args.project_root)
-        service = LakeService(settings, ContractLoader(settings.project_root / "contracts"))
+        service = LakeService(settings)
         if args.command == "datasets":
             rows = [
                 (

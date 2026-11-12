@@ -95,11 +95,14 @@ credential vending support in prerelease RustFS builds.
 
 ## Contract-driven workflow
 
-Actual dataset contracts stay in the local, Git-ignored `contracts/` directory.
-Fresh clones contain an empty directory placeholder. Create your local YAML
-contracts using the synthetic examples in [the CLI guide](docs/cli.md#dataset-contracts)
-before running the example workflow below. Contract contents, source locations,
-and dataset-specific provenance are not published with this repository.
+Actual dataset contracts live outside the tool checkout, by default under
+`${DATA_ROOT}/contracts` alongside `DataLake`. Set `CONTRACTS_DIR` in your private
+`.env` or environment to select another directory, or use
+`lake platform init --contracts-dir /path/to/private/contracts`. Initialization
+creates the selected directory. Create local YAML contracts using the synthetic
+examples in [the CLI guide](docs/cli.md#dataset-contracts) before running the
+workflow below. Contracts and dataset-specific provenance are not published
+with the platform source.
 
 ```bash
 lake datasets
@@ -110,7 +113,7 @@ lake lineage agency.awards
 ```
 
 `lake ingest` reads the source location, catalog target, update policy, and
-quality expectations from `contracts/agency_awards.yml`. A source
+quality expectations from `agency_awards.yml` in the configured contract directory. A source
 checksum already recorded as successful is skipped automatically. Catalog
 metadata, snapshot history, run status, quality results, and Git provenance are
 updated without hand editing.

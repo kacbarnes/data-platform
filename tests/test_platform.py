@@ -23,7 +23,6 @@ def project(tmp_path, monkeypatch):
     root.mkdir()
     repository = Path(__file__).resolve().parents[1]
     shutil.copyfile(repository / "compose.yaml", root / "compose.yaml")
-    (root / "contracts").mkdir()
     (root / "pyproject.toml").write_text("[project]\nname='test'\n")
     for key in (*PORTS, "DATA_ROOT", "PLATFORM_BACKEND", "COMPOSE_PROJECT_NAME",
                 "POLARIS_ROOT_CLIENT_SECRET", "POSTGRES_PASSWORD", "RUSTFS_SECRET_KEY"):
@@ -32,6 +31,7 @@ def project(tmp_path, monkeypatch):
         monkeypatch.delenv(key, raising=False)
     for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE", "PODMAN_COMPOSE_PROVIDER"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("CONTRACTS_DIR", raising=False)
     return root
 
 
@@ -44,6 +44,8 @@ def test_init_private_repeatable_and_relative(project, capsys):
     assert values["DATA_ROOT"] == (project / "storage with spaces").as_posix()
     assert len(values["POSTGRES_PASSWORD"]) == 48
     assert Settings.load(project, environ={}).data_root == project / "storage with spaces"
+    assert Settings.load(project, environ={}).contracts_dir == project / "storage with spaces/contracts"
+    assert not (project / "contracts").exists()
     if os.name == "posix":
         assert stat.S_IMODE((project / ".env").stat().st_mode) == 0o600
     assert not initialize(project)["created"]
@@ -93,10 +95,48 @@ def test_init_refuses_existing_storage_and_invalid_ports(project):
 
 
 def test_init_permission_failure_does_not_create_credentials(project, monkeypatch):
-    def denied(storage):
+    def denied(storage, contracts_dir):
         raise PermissionError("read-only storage")
     monkeypatch.setattr("lake_cli.platform._prepare_directories", denied)
     assert main(["--project-root", str(project), "platform", "init"]) == 2
+    assert not (project / ".env").exists()
+
+
+def test_init_external_contracts_preserves_files_and_repeat_configuration(project, tmp_path):
+    selected = tmp_path / "private contracts"
+    selected.mkdir()
+    artifact = selected / "already-there.yml"
+    artifact.write_bytes(b"private bytes\n")
+    result = initialize(project, data_root=tmp_path / "lake", contracts_dir=selected)
+    assert result["contracts_dir"] == str(selected)
+    assert not (tmp_path / "lake/contracts").exists()
+    settings = Settings.load(project, environ={})
+    assert settings.contracts_dir == selected
+    assert Platform(project).contracts_dir == selected
+    assert artifact.read_bytes() == b"private bytes\n"
+    original = (project / ".env").read_bytes()
+    assert not initialize(project, contracts_dir=selected)["created"]
+    with pytest.raises(LakeError, match="does not migrate contracts"):
+        initialize(project, contracts_dir=tmp_path / "other")
+    assert (project / ".env").read_bytes() == original
+    assert artifact.read_bytes() == b"private bytes\n"
+
+
+def test_init_contracts_environment_and_cli_option(project, tmp_path, monkeypatch):
+    selected = tmp_path / "configured"
+    monkeypatch.setenv("CONTRACTS_DIR", str(selected))
+    assert main(["--project-root", str(project), "platform", "init", "--data-root", str(tmp_path / "lake"),
+                 "--contracts-dir", str(tmp_path / "explicit")]) == 0
+    assert (tmp_path / "explicit").is_dir()
+    assert Settings.load(project, environ={}).contracts_dir == tmp_path / "explicit"
+    assert Platform(project).contracts_dir == selected
+
+
+def test_init_warehouse_contracts_rejected_before_creation(project, tmp_path):
+    storage = tmp_path / "lake"
+    with pytest.raises(LakeError, match="outside the managed"):
+        initialize(project, data_root=storage, contracts_dir=storage / "DataLake/warehouse/contracts")
+    assert not storage.exists()
     assert not (project / ".env").exists()
 
 

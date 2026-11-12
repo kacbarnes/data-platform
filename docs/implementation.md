@@ -237,8 +237,24 @@ run on Linux; automated Windows detachment remains for laptop verification.
 ## Private dataset contracts
 
 Actual dataset YAML contracts have been removed from published Git history and
-are no longer tracked. Local contract files remain in place, ignored by Git;
-`contracts/.gitkeep` preserves project discovery for fresh clones. Documentation
+are no longer tracked. The initial privacy increment preserved local files in
+the ignored source-tree directory; the external-location increment below
+supersedes that layout. Documentation
 and isolated tests provide synthetic examples. Contract checksums and operational
 tracking are unchanged. Private contract revisions/backups are maintained by the
 data owner rather than published in this platform repository.
+
+## External contract storage
+
+`CONTRACTS_DIR` selects private contract storage and defaults to
+`${DATA_ROOT}/contracts`, alongside `DataLake`. Settings, dataset discovery,
+source/build/test operations, and the compatibility ingestion wrapper share the
+same resolved location. Platform initialization creates it; status and doctor
+report it. The source-tree placeholder is removed. Project discovery checks the
+platform's package name instead of a contract directory. No implicit legacy
+fallback or automatic file migration occurs during command execution. Missing
+directories fail clearly; the managed warehouse is rejected as contract storage.
+
+Tests cover defaults, environment/file precedence, relative/absolute/home paths,
+working-directory independence, empty and unsafe values, external CLI/service/
+wrapper routing, repeated initialization, and preservation of existing files.

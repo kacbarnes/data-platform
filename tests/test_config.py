@@ -2,14 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from lake_cli.config import Settings, discover_project_root, resolve_config_path
+from lake_cli.config import Settings, discover_project_root, resolve_config_path, resolve_contracts_dir
 from lake_cli.errors import LakeError
 
 
 def make_project(path: Path) -> Path:
     path.mkdir(parents=True)
-    (path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
-    (path / "contracts").mkdir()
+    (path / "pyproject.toml").write_text("[project]\nname = 'research-lake-cli'\n")
     return path
 
 
@@ -83,6 +82,8 @@ def test_settings_environment_isolation_and_precedence(tmp_path, monkeypatch):
     assert settings.catalog == "file_catalog"
     assert settings.data_root == data_root.resolve()
     assert settings.control_db == control_db.resolve()
+    assert settings.contracts_dir == data_root / "contracts"
+    assert not settings.contracts_dir.exists()
     assert settings.polaris_url == "http://localhost:8181"
 
     overridden = Settings.load(
@@ -134,6 +135,53 @@ def test_relative_settings_paths_use_project_root(tmp_path, monkeypatch, control
 
     assert first.data_root == second.data_root == expected_data
     assert first.control_db == second.control_db == expected_control
+
+
+@pytest.mark.parametrize("configured", ["../private contracts", "~/private contracts", None])
+def test_contract_directory_resolution_and_precedence(tmp_path, monkeypatch, configured):
+    project = make_project(tmp_path / "project")
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+    (project / ".env").write_text("\n".join([
+        'DATA_ROOT="../storage"', 'CONTRACTS_DIR="../file contracts"',
+        "POLARIS_CATALOG=research", "POLARIS_ROOT_CLIENT_ID=test",
+        "POLARIS_ROOT_CLIENT_SECRET=test", "RUSTFS_ACCESS_KEY=test", "RUSTFS_SECRET_KEY=test",
+    ]))
+    environment = {} if configured is None else {"CONTRACTS_DIR": configured}
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    settings = Settings.load(project, environ=environment)
+    expected = resolve_config_path(configured or "../file contracts", base=project)
+    assert settings.contracts_dir == expected
+    assert not expected.exists()  # Loading configuration never creates storage.
+    with pytest.raises(LakeError, match="must not be empty"):
+        Settings.load(project, environ={"CONTRACTS_DIR": ""})
+
+
+def test_absolute_contract_directory(tmp_path):
+    project = tmp_path / "project"
+    selected = tmp_path / "external"
+    assert resolve_contracts_dir(selected, data_root=tmp_path / "storage", project_root=project) == selected
+
+
+def test_contract_directory_cannot_enter_warehouse(tmp_path):
+    storage = tmp_path / "storage"
+    for path in [storage / "DataLake/warehouse", storage / "DataLake/warehouse/contracts"]:
+        with pytest.raises(LakeError, match="outside the managed"):
+            resolve_contracts_dir(path, data_root=storage, project_root=tmp_path)
+    assert not storage.exists()
+
+
+def test_discovery_skips_unrelated_nested_python_project(tmp_path):
+    root = make_project(tmp_path / "platform")
+    nested = root / "analysis"
+    nested.mkdir()
+    (nested / "pyproject.toml").write_text('[project]\nname="analysis-project"')
+    assert discover_project_root(cwd=nested, environ={}) == root
+    assert not (root / "contracts").exists()
 
 
 def test_config_path_expands_home(tmp_path, monkeypatch):

@@ -168,13 +168,18 @@ Windows/Podman, but the automated Windows background process still needs laptop
 validation. No live desktop lakehouse is touched by those tests.
 
 `DATA_PLATFORM_HOME` selects software/configuration; `DATA_ROOT` selects the
-storage parent. Relative storage paths resolve against the checkout; `~` expands
+storage parent. `CONTRACTS_DIR` selects private dataset contracts and defaults
+to `<DATA_ROOT>/contracts`, alongside `DataLake`. Set it in private configuration
+or use `init --contracts-dir /path/to/contracts`; it is not part of bootstrap
+identity and changing it does not migrate the catalog. Relative storage paths resolve against the checkout; `~` expands
 to the user's home, and symlinks are resolved. Initialization defaults to the
 explicit `--data-root`, then environment `DATA_ROOT`, then `~/Data`.
 
-Directories are created beneath that parent:
+Initialization creates the configured contract directory and these storage directories
+beneath that parent (the contract directory can be overridden independently):
 
 ```text
+contracts/                   # private dataset contracts (default location)
 DataLake/landing/
 DataLake/warehouse/            # Iceberg/object-store owned
 Databases/postgres/polaris/    # Polaris metastore only in bind mode

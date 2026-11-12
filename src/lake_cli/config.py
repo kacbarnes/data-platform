@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,21 @@ def resolve_config_path(value: str, *, base: Path) -> Path:
     return path.resolve()
 
 
+def resolve_contracts_dir(
+    configured: str | Path | None, *, data_root: Path, project_root: Path
+) -> Path:
+    if configured is not None and str(configured) == "":
+        raise LakeError("CONTRACTS_DIR must not be empty")
+    path = resolve_config_path(
+        str(configured if configured is not None else data_root / "contracts"),
+        base=project_root,
+    )
+    warehouse = (data_root / "DataLake" / "warehouse").resolve()
+    if path.is_relative_to(warehouse):
+        raise LakeError("CONTRACTS_DIR must be outside the managed Iceberg warehouse")
+    return path
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -52,6 +68,12 @@ class Settings:
     s3_secret_key: str = ""
     s3_endpoint: str = "localhost:9000"
     s3_region: str = "us-west-2"
+    contracts_dir: Path | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "contracts_dir", resolve_contracts_dir(
+            self.contracts_dir, data_root=self.data_root, project_root=self.project_root,
+        ))
 
     @classmethod
     def load(
@@ -94,6 +116,10 @@ class Settings:
             s3_secret_key=value("RUSTFS_SECRET_KEY"),
             s3_endpoint=value("RUSTFS_CLIENT_ENDPOINT", "localhost:9000"),
             s3_region=value("AWS_REGION", "us-west-2"),
+            contracts_dir=resolve_contracts_dir(
+                environment.get("CONTRACTS_DIR", file_values.get("CONTRACTS_DIR")),
+                data_root=data_root, project_root=root,
+            ),
         )
 
 
@@ -115,17 +141,24 @@ def discover_project_root(
 
     current = (cwd or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "pyproject.toml").is_file() and (
-            candidate / "contracts"
-        ).is_dir():
+        if _is_project_root(candidate):
             return candidate
 
     resolved_package_file = package_file or Path(__file__)
     package_root = resolved_package_file.resolve().parents[2]
-    if (package_root / "pyproject.toml").is_file():
+    if _is_project_root(package_root):
         return package_root
 
     raise LakeError(
         "cannot locate the data-platform project; use --project-root "
         "or set DATA_PLATFORM_HOME"
     )
+
+
+def _is_project_root(path: Path) -> bool:
+    try:
+        project = tomllib.loads((path / "pyproject.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    metadata = project.get("project", {})
+    return isinstance(metadata, dict) and metadata.get("name") == "research-lake-cli"

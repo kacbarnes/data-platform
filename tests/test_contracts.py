@@ -79,3 +79,11 @@ def test_quote_identifier_validates():
     assert quote_identifier("valid_name") == '"valid_name"'
     with pytest.raises(ContractError):
         quote_identifier("invalid-name")
+
+
+def test_missing_contract_directory_is_actionable(tmp_path):
+    with pytest.raises(ContractError, match="set CONTRACTS_DIR"):
+        ContractLoader(tmp_path / "missing").all()
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert ContractLoader(empty).all() == {}

@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import uuid
 
-from .config import _read_env, discover_project_root, resolve_config_path
+from .config import _read_env, discover_project_root, resolve_config_path, resolve_contracts_dir
 from .errors import LakeError
 from .forwarding import Forwarding
 from .local_state import atomic_json as _atomic_json, read_json
@@ -61,6 +61,7 @@ def _forwarding_runtime_root(state_dir: Path) -> Path:
 def initialize(
     project_root: Path | None,
     *, data_root: Path | None = None,
+    contracts_dir: Path | None = None,
     backend: str | None = None,
     project_name: str | None = None,
     ports: dict[str, int] | None = None,
@@ -76,6 +77,10 @@ def initialize(
         platform = Platform(root)
         if data_root is not None and resolve_config_path(str(data_root), base=root) != platform.data_root:
             raise LakeError("existing DATA_ROOT differs; initialization does not migrate storage")
+        if contracts_dir is not None and resolve_contracts_dir(
+            contracts_dir, data_root=platform.data_root, project_root=root,
+        ) != platform.contracts_dir:
+            raise LakeError("existing CONTRACTS_DIR differs; initialization does not migrate contracts")
         if backend is not None and backend != platform.backend:
             raise LakeError("existing backend differs; update PLATFORM_BACKEND explicitly after stopping services")
         if project_name is not None and project_name != platform.project_name:
@@ -88,7 +93,9 @@ def initialize(
             raise LakeError("existing forwarding mode differs; stop services before editing PODMAN_FORWARDING")
         if podman_machine is not None and podman_machine != platform.machine:
             raise LakeError("existing Podman machine differs; initialization does not migrate storage")
+        platform.contracts_dir.mkdir(parents=True, exist_ok=True)
         return {"created": False, "project_root": str(root), "data_root": str(platform.data_root),
+                "contracts_dir": str(platform.contracts_dir),
                 "backend": platform.backend, "message": "Existing configuration preserved; no bootstrap performed"}
     selected_backend = backend or os.environ.get("PLATFORM_BACKEND", "docker")
     if selected_backend not in ("docker", "podman"):
@@ -97,6 +104,10 @@ def initialize(
     machine = podman_machine or os.environ.get("PODMAN_MACHINE", "podman-machine-default")
     _validate_forwarding(selected_backend, forwarding_mode, machine)
     storage = resolve_config_path(str(data_root or os.environ.get("DATA_ROOT") or Path.home() / "Data"), base=root)
+    selected_contracts = resolve_contracts_dir(
+        contracts_dir if contracts_dir is not None else os.environ.get("CONTRACTS_DIR"),
+        data_root=storage, project_root=root,
+    )
     try:
         selected_ports = {**{k: int(os.environ.get(k, v)) for k, v in PORTS.items()},
                           **(ports or {})}
@@ -115,9 +126,10 @@ def initialize(
         directory = storage / relative
         if directory.exists() and (not directory.is_dir() or any(directory.iterdir())):
             raise LakeError("storage already contains lakehouse state; restore its original configuration")
-    _prepare_directories(storage)
+    _prepare_directories(storage, selected_contracts)
     values = {
         "DATA_ROOT": storage.as_posix(), "PLATFORM_BACKEND": selected_backend,
+        "CONTRACTS_DIR": selected_contracts.as_posix(),
         "PODMAN_FORWARDING": forwarding_mode, "PODMAN_MACHINE": machine,
         "POSTGRES_STORAGE": selected_storage,
         "POSTGRES_STORAGE_TYPE": selected_storage,
@@ -146,6 +158,7 @@ def initialize(
     except FileExistsError as exc:
         raise LakeError("configuration was created concurrently; rerun init") from exc
     return {"created": True, "project_root": str(root), "data_root": str(storage),
+            "contracts_dir": str(selected_contracts),
             "backend": selected_backend, "project_name": name,
             "message": "Configuration and directories created; run lake platform up"}
 
@@ -171,7 +184,8 @@ def _validate_ports(ports: dict) -> None:
         raise LakeError("host ports must be distinct numbers between 1024 and 65535")
 
 
-def _prepare_directories(storage: Path) -> None:
+def _prepare_directories(storage: Path, contracts_dir: Path) -> None:
+    contracts_dir.mkdir(parents=True, exist_ok=True)
     for relative in ("DataLake/landing", "DataLake/warehouse", "Databases/postgres/polaris",
                      "Databases/duckdb", ".data-platform"):
         (storage / relative).mkdir(parents=True, exist_ok=True)
@@ -185,7 +199,7 @@ class Platform:
         self.root = discover_project_root(project_root)
         self.values = {**_read_env(self.root / ".env")}
         for key in (*REQUIRED, *PORTS, "DATA_ROOT", "PLATFORM_BACKEND", "COMPOSE_PROJECT_NAME",
-                    "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT", "POSTGRES_STORAGE"):
+                    "LOCAL_UID", "LOCAL_GID", "POLARIS_URL", "RUSTFS_CLIENT_ENDPOINT", "POSTGRES_STORAGE", "CONTRACTS_DIR"):
             if key in os.environ:
                 self.values[key] = os.environ[key]
         for key in ("PODMAN_FORWARDING", "PODMAN_MACHINE", "PODMAN_COMPOSE_PROVIDER"):
@@ -198,6 +212,9 @@ class Platform:
         # files; always pass the absolute result explicitly to Compose.
         self.data_root = resolve_config_path(
             self.values.get("DATA_ROOT") or str(Path.home() / "Data"), base=self.root
+        )
+        self.contracts_dir = resolve_contracts_dir(
+            self.values.get("CONTRACTS_DIR"), data_root=self.data_root, project_root=self.root,
         )
         self.backend = self.values.get("PLATFORM_BACKEND", "docker")
         if self.backend not in ("docker", "podman"):
@@ -316,7 +333,7 @@ class Platform:
 
     @contextmanager
     def _operation(self, action: str):
-        _prepare_directories(self.data_root)
+        _prepare_directories(self.data_root, self.contracts_dir)
         lock = self.state_dir / "operation.lock"
         run = {"run_id": str(uuid.uuid4()), "action": action, "started_at": _now(),
                "status": "running", "project_name": self.project_name, "steps": []}
@@ -428,6 +445,7 @@ class Platform:
 
     def status(self) -> dict:
         return {"backend": self.backend, "project_name": self.project_name,
+                "contracts_dir": str(self.contracts_dir),
                 "data_root": str(self.data_root), "services": self._run(["ps"], timeout=30),
                 "forwarding_mode": self.forwarding_mode, "forwarding": self.forwarder.status()}
 
@@ -469,6 +487,7 @@ class Platform:
             checks["compose_and_runtime"] = False
             errors.append(str(exc))
         return {"ok": all(checks.values()), "checks": checks, "errors": errors,
+                "contracts_dir": str(self.contracts_dir),
                 "backend": self.backend, "data_root": str(self.data_root),
                 "postgres_storage": self.postgres_storage,
                 "forwarding_mode": self.forwarding_mode, "forwarding": self.forwarder.status(),

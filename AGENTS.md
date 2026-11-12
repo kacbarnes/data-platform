@@ -27,10 +27,10 @@ that cannot be verified.
 
 ## Contracts and metadata
 
-- Actual dataset contracts are private local configuration in the ignored
-  `contracts/` directory. Never commit or push them; keep synthetic examples in
-  documentation and tests only.
-- Dataset contracts in `contracts/` are the human-authored source of truth for
+- Actual dataset contracts are private local configuration outside the tool
+  checkout: `CONTRACTS_DIR`, defaulting to `${DATA_ROOT}/contracts`. Never commit
+  or push them; keep synthetic examples in documentation and tests only.
+- Dataset contracts are the human-authored source of truth for
   ownership, semantics, target names, update policy, and quality expectations.
 - Iceberg/Polaris own technical table metadata: schemas, files, partitions,
   statistics, and snapshots. Do not duplicate or hand-edit it in YAML.

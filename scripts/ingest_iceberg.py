@@ -20,7 +20,7 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = Settings.load()
-    contract = ContractLoader(settings.project_root / "contracts").get(args.dataset_id)
+    contract = ContractLoader(settings.contracts_dir).get(args.dataset_id)
     if args.namespace != contract.target.namespace or args.table != contract.target.table:
         parser.error(
             "--namespace/--table must match the dataset contract; edit the contract "
