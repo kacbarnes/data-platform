@@ -176,3 +176,10 @@ Copyright 2026 Kent Barnes.
 Licensed under the [Apache License, Version 2.0](LICENSE).
 See [NOTICE](NOTICE) for attribution information. Third-party dependencies and
 managed datasets retain their respective licenses and access restrictions.
+
+## Acknowledgements
+
+This platform builds on DuckDB, Apache Polaris, Apache Iceberg, PostgreSQL,
+RustFS, and the Python ecosystem. See [third-party software acknowledgements](THIRD_PARTY_NOTICES.md)
+for contributor credits, upstream licenses, component roles, and research
+citation guidance.
