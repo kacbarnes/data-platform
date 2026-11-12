@@ -168,3 +168,11 @@ while stopped, update `DATA_ROOT`, and start it again. For a
 multi-user university deployment, replace localhost RustFS and PostgreSQL with
 managed/shared services, external identity, TLS, backups, and monitored Iceberg
 maintenance; pipeline contracts and table names can remain unchanged.
+
+## License
+
+Copyright 2026 Kent Barnes.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+See [NOTICE](NOTICE) for attribution information. Third-party dependencies and
+managed datasets retain their respective licenses and access restrictions.
