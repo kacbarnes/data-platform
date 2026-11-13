@@ -1,9 +1,13 @@
 # Research data platform
 
-A local, persistent Iceberg lakehouse used to learn and apply enterprise data
-management practices. Table objects stay under your configured data root;
-Windows catalog storage uses a Linux-backed runtime volume with separate backup
-requirements.
+A local research data platform for publishing, querying, and tracing datasets
+with Apache Iceberg. The `lake` CLI combines contract-driven ingestion, SQL
+transformations, quality checks, and operational provenance with persistent
+catalog and object storage.
+
+The current deployment targets single-user local workflows with Docker or
+Podman. The project is under active development; shared multi-user hosting and
+automated storage migration are not yet implemented.
 
 See [`ROADMAP.md`](ROADMAP.md) for the portability and packaging milestones and
 [`docs/roadmap/`](docs/roadmap/) for their implementation plans.
@@ -31,11 +35,10 @@ its first catalog-managed table representation. Silver and gold are refined
 tables and products, addressed through the catalog in the same object store.
 Iceberg manages table/snapshot metadata, not just labels on individual files.
 
-Never manually edit anything in `warehouse`; the object store, Iceberg, and
-catalog own that tree. Existing `raw`, `Archive`, or physical tier directories
-are legacy/source locations: initialization leaves them untouched and existing
-contracts can still read them. They are not part of the layout generated for
-new installations. See [storage boundaries](docs/architecture.md#physical-storage-and-logical-namespaces).
+The object store, Iceberg, and catalog own the warehouse layout. Publish changes
+through the platform client rather than editing table objects directly.
+Initialization preserves existing source directories and does not automatically
+register their contents. See [storage boundaries](docs/architecture.md#physical-storage-and-logical-namespaces).
 
 ## First-time setup
 
@@ -64,11 +67,13 @@ lake platform down
 ```
 
 See [platform setup](docs/platform.md) for native Windows/Podman commands,
-external-drive configuration, alternate ports, legacy-instance startup, retry
-records, and validation limitations. Linux/Docker was tested with a fresh
-isolated stack. Windows/Podman services and catalog queries were verified with
-a manual SSH tunnel; automated forwarding, the bundled provider and the work
-external-drive deployment still need host validation.
+storage configuration, alternate ports, existing-instance startup, and retry
+behavior. Linux/Docker has passed fresh-instance lifecycle and catalog checks.
+Native Windows/Podman has passed managed OpenSSH forwarding, service health,
+read-only catalog access, S3 listing, tunnel reuse, and shutdown/restart checks.
+Windows table-object reads/writes and external-drive storage remain unqualified.
+Detailed verification evidence and remaining limitations are recorded in the
+[implementation notes](docs/implementation.md).
 
 Default endpoints are bound to localhost:
 
@@ -81,7 +86,7 @@ Default endpoints are bound to localhost:
 
 ```bash
 mamba env update -n data-platform -f environment.yml --prune
-./scripts/install-cli
+python -m pip install --no-deps --no-build-isolation --editable .
 ```
 
 The environment contains matched DuckDB 1.5.5 CLI and Python packages. The
@@ -95,14 +100,14 @@ credential vending support in prerelease RustFS builds.
 
 ## Contract-driven workflow
 
-Actual dataset contracts live outside the tool checkout, by default under
+Dataset contracts live outside the tool checkout, by default under
 `${DATA_ROOT}/contracts` alongside `DataLake`. Set `CONTRACTS_DIR` in your private
 `.env` or environment to select another directory, or use
-`lake platform init --contracts-dir /path/to/private/contracts`. Initialization
+`lake platform init --contracts-dir /path/to/contracts`. Initialization
 creates the selected directory. Create local YAML contracts using the synthetic
 examples in [the CLI guide](docs/cli.md#dataset-contracts) before running the
-workflow below. Contracts and dataset-specific provenance are not published
-with the platform source.
+workflow below. Dataset-specific contract definitions are managed separately
+from the platform source.
 
 ```bash
 lake datasets
@@ -113,9 +118,10 @@ lake lineage agency.awards
 ```
 
 `lake ingest` reads the source location, catalog target, update policy, and
-quality expectations from `agency_awards.yml` in the configured contract directory. A source
-checksum already recorded as successful is skipped automatically. Catalog
-metadata, snapshot history, run status, quality results, and Git provenance are
+quality expectations from `agency_awards.yml` in the configured contract
+directory. A source checksum already recorded as successful is skipped
+automatically. Catalog metadata, snapshot history, run status, quality results,
+and Git provenance are
 updated without hand editing.
 
 Silver and gold products use transform contracts:
@@ -137,12 +143,13 @@ lake status --limit 20
 
 `lake query` opens DuckDB with the Polaris catalog attached and selects the
 `bronze` namespace by default. Set `DATA_PLATFORM_DUCKDB` to select a DuckDB
-executable, otherwise it uses `duckdb` from `PATH`. Its temporary credential
-file is mode `0600` on POSIX and removed after exit or interruption; Windows uses
-temporary-directory ACLs. Catalog attachment and empty-table listing were
-verified on native Windows with the manual SSH tunnel; table-object operations
-and automated forwarding still need host validation. Forced termination can
-leave the startup file behind.
+executable, otherwise it uses `duckdb` from `PATH`. Windows sessions default to
+ASCII table borders; other hosts use DuckDB's `duckbox` rendering.
+
+The client initializes credentials through a temporary startup file and removes
+it after normal exit or interruption. POSIX permissions are `0600`; Windows
+uses temporary-directory ACLs. Forced termination or a crash can leave the file
+behind. See the [query client reference](docs/cli.md#query) for details.
 
 ```bash
 lake query
@@ -169,14 +176,23 @@ On Linux/WSL, `scripts/lakehouse` remains an optional Bash wrapper around
 `python -m lake_cli query`. On native Windows, use `lake query` or the Python
 module entry point directly. The installer does not create user-bin symlinks.
 
-## Portability
+## Storage and shared deployments
 
-The host storage root is the `DATA_ROOT` value in the untracked `.env`. When
-storage moves to a NAS, stop the stack, copy the PostgreSQL and warehouse trees
-while stopped, update `DATA_ROOT`, and start it again. For a
-multi-user university deployment, replace localhost RustFS and PostgreSQL with
-managed/shared services, external identity, TLS, backups, and monitored Iceberg
-maintenance; pipeline contracts and table names can remain unchanged.
+`DATA_ROOT` selects the storage parent, and `CONTRACTS_DIR` can independently
+select the contract directory. PostgreSQL defaults to bind storage on Linux and
+a Linux-backed runtime volume on native Windows. In volume mode, catalog state
+lives outside `DATA_ROOT`, so a copy of that directory alone is not a complete
+backup. See [catalog backups](docs/platform.md#catalog-backups-in-volume-mode).
+
+Storage relocation requires a deliberate migration of catalog state, table
+objects, configuration, and operational records. Changing `DATA_ROOT` is not a
+migration: lifecycle checkpoints guard the installation's storage identity.
+Automated migration and restore are not currently provided.
+
+Shared hosting requires additional deployment design for identity and access,
+networking and TLS, concurrent clients, coordinated backups, and Iceberg
+maintenance. The current local setup is a foundation for that work; a tested
+multi-user deployment is not yet part of the project.
 
 ## License
 
